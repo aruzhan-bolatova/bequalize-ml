@@ -1,0 +1,39 @@
+{
+  "extends": "@tsconfig/react-native/tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"],
+      "@components/*": ["src/components/*"],
+      "@services/*": ["src/services/*"],
+      "@types/*": ["src/types/*"],
+      "@algorithms/*": ["src/algorithms/*"],
+      "@utils/*": ["src/utils/*"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "BequalizeApp/index.js",
+    "BequalizeApp/App.tsx"
+, "BequalizeApp/src/components/SensorDataDisplay.tsx", "BequalizeApp/src/services/EnhancedMockBluetoothManager.ts", "BequalizeApp/src/services/LocalStorageService.ts", "BequalizeApp/src/types/SensorData.ts"  ],
+  "exclude": [
+    "node_modules",
+    "android",
+    "ios"
+  ]
+} 
