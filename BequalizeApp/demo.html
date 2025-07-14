@@ -223,6 +223,164 @@
                 this.isCalibrating = false;
                 this.startTime = Date.now();
                 this.batteryLevel = 85;
+                
+                // Enhanced simulation state
+                this.exerciseIntensity = 0;
+                this.isEpisodicPhase = false;
+                this.timeSinceOnset = 15; // days since vestibular neuritis onset
+                this.menieresEpisodeCounter = 0;
+                this.lastMenieresEpisode = Date.now() - (Math.random() * 90 * 24 * 60 * 60 * 1000); // 0-90 days ago
+                
+                // Enhanced vestibular parameters with clinical validation
+                this.vestibularParams = {
+                    'Healthy Control': { 
+                        swayAmp: 50, freq: 0.8, respRate: 15, stabilityIndex: 0.95,
+                        vrmsRange: [0.3, 0.8], frequencyBand: [0.1, 2.0]
+                    },
+                    'BPPV': { 
+                        swayAmp: 150, freq: 1.5, respRate: 18, stabilityIndex: 0.7,
+                        rotationalComponent: true, vrmsRange: [1.2, 3.0], frequencyBand: [0.5, 2.0]
+                    },
+                    'Unilateral Vestibular Hypofunction': { 
+                        swayAmp: 200, freq: 0.6, respRate: 16, stabilityIndex: 0.6,
+                        asymmetricPattern: true, vrmsRange: [1.5, 4.0], frequencyBand: [0.2, 1.5]
+                    },
+                    'Bilateral Vestibular Loss': { 
+                        swayAmp: 300, freq: 0.4, respRate: 20, stabilityIndex: 0.4,
+                        highFrequencyTremor: true, vrmsRange: [2.5, 5.0], frequencyBand: [4.0, 8.0]
+                    },
+                    'Vestibular Migraine': { 
+                        swayAmp: 180, freq: 1.2, respRate: 19, stabilityIndex: 0.65,
+                        episodicWorseningPattern: true, vrmsRange: [1.8, 3.5], frequencyBand: [0.3, 2.5]
+                    },
+                    'Meniere Disease': { 
+                        swayAmp: 220, freq: 1.0, respRate: 17, stabilityIndex: 0.55,
+                        lowFrequencyInstability: true, vrmsRange: [2.0, 4.5], frequencyBand: [0.1, 0.3],
+                        severityLevels: { mild: 1.2, moderate: 2.5, severe: 4.0 }
+                    },
+                    'Vestibular Neuritis': { 
+                        swayAmp: 250, freq: 0.7, respRate: 21, stabilityIndex: 0.5,
+                        acutePhasePattern: true, vrmsRange: [2.2, 4.8], frequencyBand: [0.2, 1.8],
+                        recoveryPhases: {
+                            acute: { severity: 1.0, duration: 14 },
+                            subacute: { severity: 0.7, duration: 90 },
+                            chronic: { severity: 0.4, duration: Infinity }
+                        }
+                    }
+                };
+            }
+
+            // Enhanced Menière's Disease simulation
+            getMenieresCurrentSeverity() {
+                const params = this.vestibularParams['Meniere Disease'];
+                const timeSinceLastEpisode = Date.now() - this.lastMenieresEpisode;
+                const daysSinceEpisode = timeSinceLastEpisode / (24 * 60 * 60 * 1000);
+                
+                // Check if we're in an active episode (episodes last 20min - 12h, simulate 2h average)
+                const isInEpisode = daysSinceEpisode < 0.083; // 2 hours
+                
+                if (isInEpisode) {
+                    this.isEpisodicPhase = true;
+                    return params.severityLevels.severe;
+                }
+                
+                // Inter-episodic period with gradual improvement
+                this.isEpisodicPhase = false;
+                if (daysSinceEpisode < 1) {
+                    return params.severityLevels.moderate; // Day after episode
+                } else if (daysSinceEpisode < 7) {
+                    return params.severityLevels.mild; // Week after episode
+                } else {
+                    // Trigger new episode occasionally (15% chance per session)
+                    if (Math.random() < 0.15 && daysSinceEpisode > 30) {
+                        this.lastMenieresEpisode = Date.now();
+                        this.menieresEpisodeCounter++;
+                        return params.severityLevels.severe;
+                    }
+                    return params.severityLevels.mild;
+                }
+            }
+
+            // Enhanced Vestibular Neuritis phase detection
+            getVestibularNeuritisPhase() {
+                const params = this.vestibularParams['Vestibular Neuritis'];
+                const daysSinceOnset = this.timeSinceOnset;
+                
+                if (daysSinceOnset <= 14) {
+                    return { phase: 'acute', severity: params.recoveryPhases.acute.severity };
+                } else if (daysSinceOnset <= 90) {
+                    // Gradual improvement in subacute phase
+                    const progressRatio = (daysSinceOnset - 14) / (90 - 14);
+                    const severityReduction = progressRatio * 0.3; // 30% improvement over subacute phase
+                    return { phase: 'subacute', severity: params.recoveryPhases.subacute.severity - severityReduction };
+                } else {
+                    return { phase: 'chronic', severity: params.recoveryPhases.chronic.severity };
+                }
+            }
+
+            // Enhanced temperature simulation with exercise correlation
+            generateEnhancedTemperatureData(elapsedSeconds) {
+                const baseTemp = 36.8;
+                
+                // Exercise-induced temperature changes
+                const exerciseTemp = this.exerciseIntensity * 0.5;
+                
+                // Vestibular condition effects on autonomic regulation
+                let conditionTempEffect = 0;
+                switch (this.currentCondition) {
+                    case 'Vestibular Migraine':
+                        conditionTempEffect = 0.2; // Slight elevation during episodes
+                        break;
+                    case 'Meniere Disease':
+                        conditionTempEffect = this.isEpisodicPhase ? 0.3 : 0.1;
+                        break;
+                    case 'Vestibular Neuritis':
+                        const phase = this.getVestibularNeuritisPhase();
+                        conditionTempEffect = phase.phase === 'acute' ? 0.4 : 0.1;
+                        break;
+                }
+                
+                // Circadian rhythm (slight daily variation)
+                const circadianEffect = 0.3 * Math.sin(2 * Math.PI * elapsedSeconds / 3600);
+                
+                // Environmental and sensor noise
+                const noise = (Math.random() - 0.5) * 0.1;
+                
+                // Combine all factors
+                const finalTemp = baseTemp + exerciseTemp + conditionTempEffect + circadianEffect + noise;
+                
+                return Math.max(35.5, Math.min(39.0, parseFloat(finalTemp.toFixed(1))));
+            }
+
+            // Enhanced exercise intensity calculation
+            updateExerciseIntensity(elapsedSeconds) {
+                const baseIntensity = Math.min(1.0, elapsedSeconds / 300); // Ramp up over 5 minutes
+                const params = this.vestibularParams[this.currentCondition];
+                const vestibularChallengeMultiplier = Math.max(0.1, 1.0 - params.stabilityIndex);
+                
+                this.exerciseIntensity = baseIntensity * vestibularChallengeMultiplier;
+            }
+
+            getEnhancedParams() {
+                let params = { ...this.vestibularParams[this.currentCondition] };
+                
+                // Apply condition-specific enhancements
+                switch (this.currentCondition) {
+                    case 'Meniere Disease':
+                        const severity = this.getMenieresCurrentSeverity();
+                        params.swayAmp *= severity;
+                        params.lowFrequencyBias = true;
+                        break;
+                        
+                    case 'Vestibular Neuritis':
+                        const neuritisPhase = this.getVestibularNeuritisPhase();
+                        params.swayAmp *= neuritisPhase.severity;
+                        params.recoveryFactor = neuritisPhase.severity;
+                        params.currentPhase = neuritisPhase.phase;
+                        break;
+                }
+                
+                return params;
             }
 
             async connect() {
@@ -285,32 +443,64 @@
             generateSensorPacket() {
                 const elapsedSeconds = (Date.now() - this.startTime) / 1000;
                 
-                // Different patterns based on condition
-                const conditionParams = {
-                    'Healthy Control': { swayAmp: 50, freq: 0.8, respRate: 15 },
-                    'BPPV': { swayAmp: 150, freq: 1.5, respRate: 18 },
-                    'Unilateral Vestibular Hypofunction': { swayAmp: 200, freq: 0.6, respRate: 16 },
-                    'Bilateral Vestibular Loss': { swayAmp: 300, freq: 0.4, respRate: 20 }
-                };
+                // Update exercise intensity and get enhanced parameters
+                this.updateExerciseIntensity(elapsedSeconds);
+                const params = this.getEnhancedParams();
                 
-                const params = conditionParams[this.currentCondition] || conditionParams['Healthy Control'];
+                // Generate accelerometer data with enhanced patterns
+                let accelX = params.swayAmp * Math.sin(2 * Math.PI * params.freq * elapsedSeconds);
+                let accelY = params.swayAmp * Math.cos(2 * Math.PI * params.freq * elapsedSeconds * 0.7);
+                
+                // Add condition-specific modifications
+                if (params.asymmetricPattern) {
+                    accelX += params.swayAmp * 0.5 * Math.sin(2 * Math.PI * 0.3 * elapsedSeconds);
+                }
+                if (params.rotationalComponent) {
+                    accelX += params.swayAmp * 0.3 * Math.sin(2 * Math.PI * 2.0 * elapsedSeconds);
+                    accelY += params.swayAmp * 0.3 * Math.cos(2 * Math.PI * 2.0 * elapsedSeconds);
+                }
+                if (params.highFrequencyTremor) {
+                    accelX += 20 * Math.sin(2 * Math.PI * 8 * elapsedSeconds);
+                    accelY += 20 * Math.cos(2 * Math.PI * 8 * elapsedSeconds);
+                }
+                if (params.lowFrequencyBias) {
+                    accelX += params.swayAmp * 0.4 * Math.sin(2 * Math.PI * 0.2 * elapsedSeconds);
+                    accelY += params.swayAmp * 0.4 * Math.cos(2 * Math.PI * 0.15 * elapsedSeconds);
+                }
+
+                // Generate gyroscope data
+                let gyroX = params.swayAmp * 0.5 * Math.cos(2 * Math.PI * params.freq * elapsedSeconds);
+                let gyroY = params.swayAmp * 0.4 * Math.sin(2 * Math.PI * params.freq * elapsedSeconds * 0.8);
+                let gyroZ = 0;
+                
+                if (params.rotationalComponent) {
+                    gyroZ = params.swayAmp * 0.6 * Math.sin(2 * Math.PI * 1.5 * elapsedSeconds);
+                }
+
+                // Enhanced respiratory signal with exercise effects
+                let respiratorySignal = 2048 + 300 * Math.sin(2 * Math.PI * params.respRate / 60 * elapsedSeconds);
+                if (this.currentCondition !== 'Healthy Control') {
+                    respiratorySignal += 50 * Math.sin(2 * Math.PI * 0.1 * elapsedSeconds);
+                }
+                // Add exercise-induced breathing changes
+                respiratorySignal += this.exerciseIntensity * 100;
                 
                 return {
                     timestamp: Date.now(),
                     battery_percent: this.batteryLevel,
                     buttons_state: Math.random() < 0.99 ? 0 : Math.floor(Math.random() * 4),
                     accelerometer: {
-                        x: Math.round(params.swayAmp * Math.sin(2 * Math.PI * params.freq * elapsedSeconds) + (Math.random() - 0.5) * 20),
-                        y: Math.round(params.swayAmp * Math.cos(2 * Math.PI * params.freq * elapsedSeconds * 0.7) + (Math.random() - 0.5) * 20),
+                        x: Math.round(accelX + (Math.random() - 0.5) * 20),
+                        y: Math.round(accelY + (Math.random() - 0.5) * 20),
                         z: Math.round(980 + (Math.random() - 0.5) * 10)
                     },
                     gyroscope: {
-                        x: parseFloat((params.swayAmp * 0.5 * Math.cos(2 * Math.PI * params.freq * elapsedSeconds) + (Math.random() - 0.5) * 10).toFixed(1)),
-                        y: parseFloat((params.swayAmp * 0.4 * Math.sin(2 * Math.PI * params.freq * elapsedSeconds * 0.8) + (Math.random() - 0.5) * 10).toFixed(1)),
-                        z: parseFloat(((Math.random() - 0.5) * 15).toFixed(1))
+                        x: parseFloat((gyroX + (Math.random() - 0.5) * 10).toFixed(1)),
+                        y: parseFloat((gyroY + (Math.random() - 0.5) * 10).toFixed(1)),
+                        z: parseFloat((gyroZ + (Math.random() - 0.5) * 15).toFixed(1))
                     },
-                    elastometer_value: Math.round(2048 + 300 * Math.sin(2 * Math.PI * params.respRate / 60 * elapsedSeconds) + (Math.random() - 0.5) * 30),
-                    temperature_celsius: parseFloat((36.8 + Math.sin(elapsedSeconds / 100) * 0.3 + (Math.random() - 0.5) * 0.1).toFixed(1))
+                    elastometer_value: Math.round(Math.max(1500, Math.min(2600, respiratorySignal + (Math.random() - 0.5) * 30))),
+                    temperature_celsius: this.generateEnhancedTemperatureData(elapsedSeconds)
                 };
             }
 

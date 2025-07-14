@@ -28,9 +28,11 @@
   },
   "include": [
     "src/**/*",
-    "BequalizeApp/index.js",
-    "BequalizeApp/App.tsx"
-, "BequalizeApp/src/components/SensorDataDisplay.tsx", "BequalizeApp/src/services/EnhancedMockBluetoothManager.ts", "BequalizeApp/src/services/LocalStorageService.ts", "BequalizeApp/src/types/SensorData.ts"  ],
+    "index.js",
+    "App.tsx",
+    "**/*.ts",
+    "**/*.tsx"
+  ],
   "exclude": [
     "node_modules",
     "android",

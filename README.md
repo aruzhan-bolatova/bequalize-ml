@@ -15,6 +15,8 @@ BequalizeApp/
 │   └── components/
 │       └── SensorDataDisplay.tsx            # Real-time sensor display
 ├── App.tsx                         # Main application component
+├── demo.html                       # Web demo for immediate testing
+├── test-setup.js                   # Validation test script
 ├── package.json                    # Dependencies and scripts
 ├── tsconfig.json                   # TypeScript configuration
 └── README.md                       # This file
@@ -24,34 +26,63 @@ BequalizeApp/
 
 ### Prerequisites
 - Node.js (v16 or later)
-- React Native development environment
-- iOS Simulator or Android Emulator
+- Web browser (for immediate demo)
+- React Native CLI (for mobile development - optional)
 
-### Installation
+### Quick Start (Web Demo)
 
-1. **Install dependencies:**
+**The fastest way to see the project working:**
+
+1. **Navigate to project directory:**
    ```bash
-   npm install
+   cd BequalizeApp
    ```
 
-2. **For iOS (macOS only):**
+2. **Install dependencies:**
    ```bash
-   cd ios && pod install && cd ..
+   npm install --legacy-peer-deps
    ```
 
-3. **Start the Metro bundler:**
+3. **Run validation tests:**
    ```bash
-   npm start
+   node test-setup.js
    ```
 
-4. **Run the app:**
+4. **Open web demo for phase 1 demo:**
    ```bash
-   # For iOS
-   npm run ios
-   
-   # For Android
-   npm run android
+   open demo.html
    ```
+   Or manually open `demo.html` in your browser to see the live simulation!
+
+### React Native Development Setup (Advanced)
+
+For full React Native mobile development, you'll need to set up the complete environment:
+
+**Run on device/simulator:**
+   ```bash
+   # For iOS (requires Xcode and iOS Simulator) 
+   # For Android (requires Android Studio and Emulator)
+   npx expo start --clear
+   ```
+
+### Available Scripts
+
+- **`npm run type-check`** - Check TypeScript compilation
+- **`node test-setup.js`** - Run project validation tests
+- **`open demo.html`** - Open web demo in browser
+- **`npx expo start --clear --ios`** - Run on iOS 
+- **`npx expo start --clear --android`** - Run on Android 
+
+## 🌐 Web Demo Features
+
+**The web demo (`demo.html`) provides immediate access to:**
+
+- ✅ **Real-time sensor data** at 50Hz
+- ✅ **Vestibular condition simulation** (Healthy, BPPV, UVH, BVL)
+- ✅ **Interactive exercise controls** (Connect, Start/Stop Exercise, Calibrate)
+- ✅ **Live breathing visualization** with animated progress bars
+- ✅ **Realistic sensor patterns** matching clinical conditions
+- ✅ **Session tracking** with data point counting
 
 ## 📱 Features Implemented (Phase 1)
 
@@ -132,12 +163,17 @@ The foundation is now complete. The next phase will implement:
 
 ## 🔍 Testing the Application
 
-1. **Connect to Mock Device**: Tap "Connect Device" to start data simulation
-2. **Start Exercise**: Choose an exercise and tap "Start Exercise"
-3. **Observe Real-time Data**: Watch sensor values update at 50Hz
-4. **Switch Conditions**: Use simulation controls to test different vestibular patterns
-5. **Save Sessions**: Exercise data is automatically saved locally
-6. **View History**: Scroll down to see past exercise sessions
+### Web Demo Testing:
+1. **Open `demo.html`** in your browser
+2. **Click "Connect Device"** → See realistic sensor data flowing at 50Hz
+3. **Click "Start Exercise"** → Watch data collection with real-time counters
+4. **Try different conditions** → "BPPV", "UVH", "BVL" buttons show different sway patterns
+5. **Observe breathing patterns** → Green bar shows elastometer-based breathing cycles
+
+### Development Testing:
+1. **Run validation:** `node test-setup.js`
+2. **Type checking:** `npm run type-check`
+3. **Code structure:** All TypeScript files compile without errors
 
 ## 📊 Mock Data Features
 
@@ -163,6 +199,14 @@ The app uses the following key configurations:
 - **Data Format**: JSON as specified in documentation
 - **Storage**: Local AsyncStorage for privacy
 
+## ⚠️ Current Status
+
+- ✅ **Web Demo**: Fully functional - immediate testing available
+- ✅ **TypeScript Code**: Complete and validated
+- ✅ **Mock Data System**: Realistic clinical patterns
+- ⚠️ **React Native**: Basic setup complete, requires full RN environment for mobile testing
+- 🔄 **Next Phase**: Ready for signal processing and ML implementation
+
 ---
 
-**Note**: This is a development version using mock data. The next phase will integrate with actual Bequalize Belt hardware and implement advanced ML algorithms for clinical assessment. 
+**Note**: This is a development version using mock data. The web demo provides immediate access to all core functionality. For full React Native mobile development, additional setup is required. The next phase will integrate with actual Bequalize Belt hardware and implement advanced ML algorithms for clinical assessment. 

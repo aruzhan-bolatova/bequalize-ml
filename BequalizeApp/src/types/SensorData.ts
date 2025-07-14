@@ -58,14 +58,15 @@ export type ExerciseType =
   | 'Breath-Hold Exercises';
 
 // Vestibular conditions for user profiling
+// Q: what conditions are we looking for?
 export type VestibularCondition = 
-  | 'BPPV'
-  | 'Unilateral Vestibular Hypofunction'
-  | 'Bilateral Vestibular Loss'
-  | 'Vestibular Migraine'
-  | 'Meniere Disease'
-  | 'Vestibular Neuritis'
-  | 'Healthy Control';
+  | 'normal'
+  | 'bppv'
+  | 'vestibular_neuritis'
+  | 'menieres'
+  | 'bilateral_loss'
+  | 'unilateral_loss'
+  | 'migraine';
 
 // User profile interface
 export interface UserProfile {
@@ -116,11 +117,11 @@ export interface ExerciseSessionSummary {
   exerciseType: ExerciseType;
   durationSeconds: number;
   summaryData: {
-    posture: {
+    posture: {    
       avgPitch: number;
       stdDevPitch: number;
       avgRoll: number;
-      stdDevRoll: number;
+      stdDevRoll: number;   
       swayAreaCm2: number;
     };
     respiration: {
@@ -136,6 +137,12 @@ export interface ExerciseSessionSummary {
   };
 }
 
+// Exercise session interface for ML training
+export interface ExerciseSession extends ExerciseSessionSummary {
+  userId: string;
+  condition?: VestibularCondition;
+}
+
 // Real-time feedback data structures
 export interface RealTimeFeedback {
   stability_score: number;
@@ -144,6 +151,8 @@ export interface RealTimeFeedback {
   coaching_cues: CoachingCue[];
 }
 
+// Safety alerts returned from the ML model
+// Q: what are the safety alerts we are looking for?
 export interface SafetyAlert {
   type: 'fall_risk' | 'excessive_sway' | 'irregular_breathing' | 'device_malfunction';
   severity: 'low' | 'medium' | 'high';
@@ -188,4 +197,178 @@ export interface VestibularAssessment {
   };
   fall_risk_category: 'low' | 'moderate' | 'high';
   recommendations: string[];
+}
+
+// Phase 2: Advanced Signal Processing Types
+
+// Mathematical utility types for signal processing
+export interface Vector3D {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface EulerAngles {
+  roll: number;  // Rotation around X-axis (degrees)
+  pitch: number; // Rotation around Y-axis (degrees)
+  yaw: number;   // Rotation around Z-axis (degrees)
+}
+
+export interface Quaternion {
+  w: number;
+  x: number;
+  y: number;
+  z: number;
+}
+
+// Respiratory analysis results
+export interface RespiratoryMetrics {
+  breathingRate: number;        // BPM
+  breathingAmplitude: number;   // Peak-to-valley difference
+  ieRatio: number;             // Inspiration/Expiration ratio
+  breathingRegularity: number; // Coefficient of variation
+  filteredSignal: number[];    // Low-pass filtered elastometer data
+  peaks: number[];             // Peak indices
+  valleys: number[];           // Valley indices
+  signalQuality?: number;      // Quality of respiratory signal (0-1) - optional for now
+}
+
+// Postural analysis results
+export interface PosturalFeatures {
+  swayPathLength: number;          // Total path length in cm
+  swayArea: number;               // 95% confidence ellipse area in cm²
+  swayVelocity: number;           // Mean velocity in cm/s
+  frequencyPeaks: number[];       // Dominant frequencies in Hz
+  stabilityIndex: number;         // Overall stability score (0-1)
+  anteriorPosteriorSway: number;  // AP sway amplitude
+  medioLateralSway: number;       // ML sway amplitude
+  stabilogramDiffusion?: StabilogramDiffusion; // Optional for now
+}
+
+export interface StabilogramDiffusion {
+  shortTermSlope: number;   // Short-term diffusion slope
+  longTermSlope: number;    // Long-term diffusion slope
+  criticalPoint: number;    // Transition point between regions
+  diffusionCoefficient: number; // Overall diffusion measure
+}
+
+// Sensory integration assessment
+export interface SensoryWeights {
+  visual: number;        // Weight of visual input (0-1)
+  proprioceptive: number; // Weight of proprioceptive input (0-1)
+  vestibular: number;    // Weight of vestibular input (0-1)
+  confidence: number;    // Confidence in the assessment (0-1)
+}
+
+// IMU data structure for feature extraction
+export interface IMUData {
+  timestamp: number;
+  roll: number;
+  pitch: number;
+  yaw: number;
+  accel: Vector3D;
+  gyro: Vector3D;
+}
+
+// Frequency domain analysis
+export interface FrequencyAnalysis {
+  frequencies: number[];    // Frequency bins
+  magnitudes: number[];    // Magnitude at each frequency
+  dominantFreq: number;    // Primary oscillation frequency
+  spectralCentroid: number; // Center of mass of spectrum
+  powerSpectralDensity: number[]; // PSD values
+}
+
+// Kalman filter state for optimal estimation
+export interface OptimalEstimate {
+  orientation: EulerAngles;
+  angularVelocity: Vector3D;
+  confidence: number;
+  timestamp: number;
+}
+
+// Real-time processing insights
+export interface RealTimeInsights {
+  currentStability: number;        // Current stability score (0-1)
+  breathingQuality: number;        // Current breathing quality (0-1)
+  postureAlert: PostureAlert | null; // Any posture alerts
+  exerciseProgress: ExerciseProgress; // Exercise progress metrics
+  recommendations: string[];       // Real-time recommendations
+  confidence: number;             // Confidence in current analysis (0-1)
+  timestamp: number;              // When insights were generated
+}
+
+export interface PostureAlert {
+  type: 'excessive_sway' | 'poor_balance' | 'fall_risk' | 'asymmetric_posture';
+  severity: 'low' | 'medium' | 'high';
+  message: string;
+  timestamp: number;
+}
+
+export interface ExerciseProgress {
+  duration: number;               // Current exercise duration in seconds
+  qualityScore: number;          // Overall exercise quality (0-1)
+  completionPercentage: number;  // Exercise completion (0-100)
+  targetMet: boolean;            // Whether target is being met
+  phase?: 'warmup' | 'active' | 'cooldown' | 'complete'; // Optional for now
+}
+
+// Processing performance metrics
+export interface ProcessingMetrics {
+  bufferUtilization: number;     // How full the buffer is (0-1)
+  processingLatency: number;     // Processing time in ms
+  dataQuality: number;          // Quality of incoming data (0-1)
+  samplingRate: number;         // Actual sampling rate
+  memoryUsage?: number;         // Memory usage in MB - optional for now
+}
+
+// Enhanced exercise session with Phase 2 features
+export interface EnhancedExerciseSession extends ExerciseSessionSummary {
+  advancedMetrics: {
+    signalProcessing: {
+      kalmanFilterPerformance: number;
+      complementaryFilterStability: number;
+      signalToNoiseRatio: number;
+    };
+    vestibularAnalysis: {
+      rombergRatio: number;
+      sensoryWeights: SensoryWeights;
+      stabilogramDiffusion: StabilogramDiffusion;
+    };
+    realTimePerformance: {
+      averageProcessingLatency: number;
+      dataQualityScore: number;
+      alertsGenerated: number;
+    };
+  };
+  rawFeatureData?: {
+    respiratory: RespiratoryMetrics[];
+    postural: PosturalFeatures[];
+    realTimeInsights: RealTimeInsights[];
+  };
+}
+
+// Phase 3: Additional ML Model Types
+
+export interface MLModelMetrics {
+  accuracy: number;
+  loss: number;
+  trainingTime: number;
+  modelSize: number;
+  inferenceTime: number;
+}
+
+export interface SymptomPrediction {
+  vertigo: number;        // 0-1 probability
+  imbalance: number;      // 0-1 probability
+  nausea: number;         // 0-1 probability
+  confidence: number;
+}
+
+export interface ModelPrediction {
+  fallRisk: FallRiskAssessment;
+  exerciseQuality: ExerciseQualityScore;
+  symptomPrediction: SymptomPrediction;
+  confidence: number;
+  processingTime: number;
 } 

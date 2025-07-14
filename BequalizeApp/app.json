@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Bequalize",
+    "slug": "bequalize-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/images/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bequalize.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#FFFFFF"
+      },
+      "package": "com.bequalize.app"
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    }
+  }
+} 

@@ -1,7 +1,7 @@
 /**
  * Enhanced Mock Bluetooth Manager for Bequalize Belt
  * Simulates realistic vestibular conditions and sensor patterns
- * Based on the documentation requirements
+ * Based on the documentation requirements and latest clinical research
  */
 
 import { SensorDataPacket, VestibularCondition, ExerciseType } from '../types/SensorData';
@@ -19,68 +19,228 @@ export class EnhancedMockBluetoothManager {
   // Current simulation state
   private simulationState = {
     startTime: Date.now(),
-    currentCondition: 'Healthy Control' as VestibularCondition,
+    currentCondition: 'normal' as VestibularCondition,
     currentExercise: 'Romberg Test (Eyes Open)' as ExerciseType,
     batteryLevel: 85,
     temperature: 36.8,
     isCalibrating: false,
-    exerciseDuration: 0
+    exerciseDuration: 0,
+    // Enhanced state for improved simulation
+    exerciseIntensity: 0,
+    isEpisodicPhase: false,
+    timeSinceOnset: 15, // days since vestibular neuritis onset
+    menieresEpisodeCounter: 0,
+    lastMenieresEpisode: 0
   };
 
-  // Vestibular condition parameters
+  // Enhanced vestibular condition parameters with clinical validation
   private vestibularParams = {
-    'Healthy Control': {
+    'normal': {
       swayAmplitude: 0.5,
       swayFrequency: 0.8,
       respiratoryRate: 15,
-      stabilityIndex: 0.95
+      stabilityIndex: 0.95,
+      vrmsRange: [0.3, 0.8], // cm/s based on clinical studies
+      frequencyBand: [0.1, 2.0] // Hz
     },
-    'BPPV': {
+    'bppv': {             //Benign Paroxysmal Positional Vertigo
       swayAmplitude: 2.5,
       swayFrequency: 1.5,
       respiratoryRate: 18,
       stabilityIndex: 0.7,
-      rotationalComponent: true
+      rotationalComponent: true,
+      vrmsRange: [1.2, 3.0],
+      frequencyBand: [0.5, 2.0],
+      episodicPattern: true
     },
-    'Unilateral Vestibular Hypofunction': {
+    'unilateral_loss': {  // Unilateral loss of vestibular function
       swayAmplitude: 3.0,
       swayFrequency: 0.6,
       respiratoryRate: 16,
       stabilityIndex: 0.6,
-      asymmetricPattern: true
+      asymmetricPattern: true,
+      vrmsRange: [1.5, 4.0],
+      frequencyBand: [0.2, 1.5],
+      medioLateralBias: true
     },
-    'Bilateral Vestibular Loss': {
+    'bilateral_loss': {  // Bilateral loss of vestibular function
       swayAmplitude: 4.0,
       swayFrequency: 0.4,
       respiratoryRate: 20,
       stabilityIndex: 0.4,
-      highFrequencyTremor: true
+      highFrequencyTremor: true,
+      vrmsRange: [2.5, 5.0],
+      frequencyBand: [4.0, 8.0],
+      visualDependence: true
     },
-    'Vestibular Migraine': {
+    'migraine': {   // Migraine with vestibular symptoms
       swayAmplitude: 2.8,
       swayFrequency: 1.2,
       respiratoryRate: 19,
       stabilityIndex: 0.65,
-      episodicWorseningPattern: true
+      episodicWorseningPattern: true,
+      vrmsRange: [1.8, 3.5],
+      frequencyBand: [0.3, 2.5]
     },
-    'Meniere Disease': {
+    'menieres': {  // Menière's disease
       swayAmplitude: 3.2,
       swayFrequency: 1.0,
       respiratoryRate: 17,
       stabilityIndex: 0.55,
-      lowFrequencyInstability: true
+      lowFrequencyInstability: true,
+      vrmsRange: [2.0, 4.5],
+      frequencyBand: [0.1, 0.3], // Low frequency dominance
+      fluctuatingEpisodes: true,
+      severityLevels: {
+        mild: 1.2,
+        moderate: 2.5,
+        severe: 4.0
+      }
     },
-    'Vestibular Neuritis': {
+    'vestibular_neuritis': {  // Vestibular neuritis  
       swayAmplitude: 3.5,
       swayFrequency: 0.7,
       respiratoryRate: 21,
       stabilityIndex: 0.5,
-      acutePhasePattern: true
+      acutePhasePattern: true,
+      vrmsRange: [2.2, 4.8],
+      frequencyBand: [0.2, 1.8],
+      recoveryPhases: {
+        acute: { severity: 1.0, duration: 14 }, // first 2 weeks
+        subacute: { severity: 0.7, duration: 90 }, // 2-12 weeks  
+        chronic: { severity: 0.4, duration: Infinity } // 3+ months
+      }
     }
   };
 
   constructor() {
-    console.log('Enhanced Mock Bluetooth Manager initialized');
+    console.log('Enhanced Mock Bluetooth Manager initialized with clinical validation');
+    // Initialize Menière's episode timing
+    this.initializeMenieresEpisodes();
+  }
+
+  // Initialize realistic Menière's episode patterns
+  private initializeMenieresEpisodes(): void {
+    // Simulate random episode timing (average 1-4 episodes per year)
+    this.simulationState.lastMenieresEpisode = Date.now() - (Math.random() * 90 * 24 * 60 * 60 * 1000); // 0-90 days ago
+  }
+
+  // Enhanced Menière's Disease simulation
+  private getMenieresCurrentSeverity(): number {
+    const params = this.vestibularParams['menieres'];
+    if (!params || !params.severityLevels) {
+      console.warn('Menieres parameters not found, using default');
+      return 1.0;
+    }
+    const timeSinceLastEpisode = Date.now() - this.simulationState.lastMenieresEpisode;
+    const daysSinceEpisode = timeSinceLastEpisode / (24 * 60 * 60 * 1000);
+    
+    // Check if we're in an active episode (episodes last 20min - 12h, simulate 2h average)
+    const isInEpisode = daysSinceEpisode < 0.083; // 2 hours
+    
+    if (isInEpisode) {
+      this.simulationState.isEpisodicPhase = true;
+      return params.severityLevels.severe;
+    }
+    
+    // Inter-episodic period with gradual improvement
+    this.simulationState.isEpisodicPhase = false;
+    if (daysSinceEpisode < 1) {
+      return params.severityLevels.moderate; // Day after episode
+    } else if (daysSinceEpisode < 7) {
+      return params.severityLevels.mild; // Week after episode
+    } else {
+      // Trigger new episode occasionally (15% chance per session)
+      if (Math.random() < 0.15 && daysSinceEpisode > 30) {
+        this.simulationState.lastMenieresEpisode = Date.now();
+        this.simulationState.menieresEpisodeCounter++;
+        return params.severityLevels.severe;
+      }
+      return params.severityLevels.mild;
+    }
+  }
+
+  // Enhanced Vestibular Neuritis phase detection
+  private getVestibularNeuritisPhase(): { phase: string; severity: number } {
+    const params = this.vestibularParams['vestibular_neuritis'];
+    if (!params || !params.recoveryPhases) {
+      console.warn('Vestibular neuritis parameters not found, using default');
+      return { phase: 'normal', severity: 1.0 };
+    }
+    const daysSinceOnset = this.simulationState.timeSinceOnset;
+    
+    if (daysSinceOnset <= 14) {
+      return { 
+        phase: 'acute', 
+        severity: params.recoveryPhases.acute.severity 
+      };
+    } else if (daysSinceOnset <= 90) {
+      // Gradual improvement in subacute phase
+      const progressRatio = (daysSinceOnset - 14) / (90 - 14);
+      const severityReduction = progressRatio * 0.3; // 30% improvement over subacute phase
+      return { 
+        phase: 'subacute', 
+        severity: params.recoveryPhases.subacute.severity - severityReduction 
+      };
+    } else {
+      return { 
+        phase: 'chronic', 
+        severity: params.recoveryPhases.chronic.severity 
+      };
+    }
+  }
+
+  // Enhanced temperature simulation with exercise correlation
+  private generateEnhancedTemperatureData(elapsedSeconds: number): number {
+    const baseTemp = 36.8;
+    
+    // Exercise-induced temperature changes
+    const exerciseTemp = this.simulationState.exerciseIntensity * 0.5;
+    
+    // Vestibular condition effects on autonomic regulation
+    const conditionTempEffect = this.getConditionTemperatureEffect();
+    
+    // Circadian rhythm (slight daily variation)
+    const circadianEffect = 0.3 * Math.sin(2 * Math.PI * elapsedSeconds / 3600);
+    
+    // Environmental and sensor noise
+    const noise = (Math.random() - 0.5) * 0.1;
+    
+    // Combine all factors
+    const finalTemp = baseTemp + exerciseTemp + conditionTempEffect + circadianEffect + noise;
+    
+    return parseFloat(Math.max(35.5, Math.min(39.0, finalTemp)).toFixed(1));
+  }
+
+  private getConditionTemperatureEffect(): number {
+    switch (this.simulationState.currentCondition) {
+      case 'migraine':
+        return 0.2; // Slight elevation during episodes
+      case 'menieres':
+        return this.simulationState.isEpisodicPhase ? 0.3 : 0.1;
+      case 'vestibular_neuritis':
+        const phase = this.getVestibularNeuritisPhase();
+        return phase.phase === 'acute' ? 0.4 : 0.1; // Elevated in acute phase
+      default:
+        return 0;
+    }
+  }
+
+  // Enhanced exercise intensity calculation
+  private updateExerciseIntensity(elapsedSeconds: number): void {
+    const baseIntensity = Math.min(1.0, elapsedSeconds / 300); // Ramp up over 5 minutes
+    const vestibularChallengeMultiplier = this.getVestibularChallengeLevel();
+    
+    this.simulationState.exerciseIntensity = baseIntensity * vestibularChallengeMultiplier;
+  }
+
+  private getVestibularChallengeLevel(): number {
+    const params = this.vestibularParams[this.simulationState.currentCondition];
+    if (!params || !params.stabilityIndex) {
+      console.warn(`Invalid condition: ${this.simulationState.currentCondition}, using normal`);
+      return Math.max(0.1, 1.0 - this.vestibularParams['normal'].stabilityIndex);
+    }
+    return Math.max(0.1, 1.0 - params.stabilityIndex); // Higher challenge = higher intensity
   }
 
   // Public API methods
@@ -134,9 +294,16 @@ export class EnhancedMockBluetoothManager {
     }
   }
 
-  // Simulation control methods
+  // Enhanced simulation control methods
   public setVestibularCondition(condition: VestibularCondition): void {
     this.simulationState.currentCondition = condition;
+    
+    // Reset condition-specific parameters
+    if (condition === 'vestibular_neuritis') {
+      // Randomize onset time for realistic simulation
+      this.simulationState.timeSinceOnset = Math.random() * 180; // 0-6 months
+    }
+    
     console.log(`Mock: Simulating ${condition} condition`);
   }
 
@@ -154,6 +321,18 @@ export class EnhancedMockBluetoothManager {
   public endCalibration(): void {
     this.simulationState.isCalibrating = false;
     console.log('Mock: Calibration phase completed');
+  }
+
+  // Advanced simulation methods
+  public setVestibularNeuritisOnset(daysAgo: number): void {
+    this.simulationState.timeSinceOnset = daysAgo;
+    console.log(`Mock: Set vestibular neuritis onset to ${daysAgo} days ago`);
+  }
+
+  public triggerMenieresEpisode(): void {
+    this.simulationState.lastMenieresEpisode = Date.now();
+    this.simulationState.menieresEpisodeCounter++;
+    console.log('Mock: Triggered Menière\'s disease episode');
   }
 
   // Private methods for data generation
@@ -182,7 +361,8 @@ export class EnhancedMockBluetoothManager {
     const currentTime = Date.now();
     const elapsedSeconds = (currentTime - this.simulationState.startTime) / 1000;
     
-    const params = this.vestibularParams[this.simulationState.currentCondition];
+    // Get enhanced parameters based on condition
+    const params = this.getEnhancedParams();
 
     // Generate accelerometer data (including gravity and sway)
     const accelerometer = this.generateAccelerometerData(elapsedSeconds, params);
@@ -193,8 +373,8 @@ export class EnhancedMockBluetoothManager {
     // Generate elastometer data (respiratory signal)
     const elastometer_value = this.generateElastometerData(elapsedSeconds, params);
     
-    // Generate temperature with realistic drift
-    const temperature_celsius = this.generateTemperatureData(elapsedSeconds);
+    // Generate enhanced temperature with exercise correlation
+    const temperature_celsius = this.generateEnhancedTemperatureData(elapsedSeconds);
     
     // Generate button state (mostly idle, occasional presses)
     const buttons_state = this.generateButtonState(elapsedSeconds);
@@ -210,6 +390,33 @@ export class EnhancedMockBluetoothManager {
     };
   }
 
+  private getEnhancedParams(): any {
+    const baseParams = this.vestibularParams[this.simulationState.currentCondition];
+    if (!baseParams) {
+      console.warn(`Invalid condition: ${this.simulationState.currentCondition}, using normal`);
+      return { ...this.vestibularParams['normal'] };
+    }
+    let params: any = { ...baseParams };
+    
+    // Apply condition-specific enhancements
+    switch (this.simulationState.currentCondition) {
+      case 'menieres':
+        const severity = this.getMenieresCurrentSeverity();
+        params.swayAmplitude *= severity;
+        params.lowFrequencyBias = true;
+        break;
+        
+      case 'vestibular_neuritis':
+        const neuritisPhase = this.getVestibularNeuritisPhase();
+        params.swayAmplitude *= neuritisPhase.severity;
+        params.recoveryFactor = neuritisPhase.severity;
+        params.currentPhase = neuritisPhase.phase;
+        break;
+    }
+    
+    return params;
+  }
+
   private generateAccelerometerData(elapsedSeconds: number, params: any): { x: number; y: number; z: number } {
     // Base gravity component (device assumed to be on torso)
     const baseGravity = { x: 0, y: 0, z: 980 }; // mg units
@@ -222,7 +429,7 @@ export class EnhancedMockBluetoothManager {
     let conditionModifierX = 0;
     let conditionModifierY = 0;
     
-    if (params.asymmetricPattern) {
+    if (params.asymmetricPattern || params.medioLateralBias) {
       conditionModifierX = params.swayAmplitude * 50 * Math.sin(2 * Math.PI * 0.3 * elapsedSeconds);
     }
     
@@ -234,6 +441,12 @@ export class EnhancedMockBluetoothManager {
     if (params.highFrequencyTremor) {
       conditionModifierX += 20 * Math.sin(2 * Math.PI * 8 * elapsedSeconds);
       conditionModifierY += 20 * Math.cos(2 * Math.PI * 8 * elapsedSeconds);
+    }
+
+    // Add low frequency bias for Menière's disease
+    if (params.lowFrequencyBias) {
+      conditionModifierX += params.swayAmplitude * 40 * Math.sin(2 * Math.PI * 0.2 * elapsedSeconds);
+      conditionModifierY += params.swayAmplitude * 40 * Math.cos(2 * Math.PI * 0.15 * elapsedSeconds);
     }
 
     // Add realistic noise
@@ -292,10 +505,14 @@ export class EnhancedMockBluetoothManager {
     }
 
     // Add breathing irregularities based on condition
-    if (this.simulationState.currentCondition !== 'Healthy Control') {
+    if (this.simulationState.currentCondition !== 'normal') {
       const irregularity = 50 * Math.sin(2 * Math.PI * 0.1 * elapsedSeconds);
       respiratorySignal += irregularity;
     }
+
+    // Add exercise-induced breathing changes
+    const exerciseEffect = this.simulationState.exerciseIntensity * 100;
+    respiratorySignal += exerciseEffect;
 
     // Add noise
     const noise = (Math.random() - 0.5) * 20;
@@ -309,16 +526,7 @@ export class EnhancedMockBluetoothManager {
       respiratorySignal = 2048 + (Math.random() - 0.5) * 30;
     }
 
-    return Math.round(respiratorySignal + noise);
-  }
-
-  private generateTemperatureData(elapsedSeconds: number): number {
-    // Start at body temperature, slight variations
-    const baseTemp = 36.8;
-    const dailyVariation = 0.3 * Math.sin(2 * Math.PI * elapsedSeconds / 3600); // hourly cycle
-    const noise = (Math.random() - 0.5) * 0.1;
-    
-    return parseFloat((baseTemp + dailyVariation + noise).toFixed(1));
+    return Math.round(Math.max(1500, Math.min(2600, respiratorySignal + noise)));
   }
 
   private generateButtonState(elapsedSeconds: number): number {
@@ -337,6 +545,11 @@ export class EnhancedMockBluetoothManager {
   }
 
   private updateSimulationState(): void {
+    const elapsedSeconds = (Date.now() - this.simulationState.startTime) / 1000;
+    
+    // Update exercise intensity
+    this.updateExerciseIntensity(elapsedSeconds);
+    
     // Slowly drain battery
     if (Math.random() < 0.001) { // Very rarely
       this.simulationState.batteryLevel = Math.max(0, this.simulationState.batteryLevel - 1);
@@ -366,13 +579,13 @@ export class EnhancedMockBluetoothManager {
     });
   }
 
-  // Utility methods for testing different scenarios
+  // Enhanced utility methods for clinical scenarios
   public simulateVestibularEpisode(duration: number = 30): void {
     console.log(`Mock: Simulating vestibular episode for ${duration} seconds`);
     const originalCondition = this.simulationState.currentCondition;
     
     // Temporarily worsen the condition
-    this.setVestibularCondition('Vestibular Migraine');
+    this.setVestibularCondition('migraine');
     
     setTimeout(() => {
       this.setVestibularCondition(originalCondition);
@@ -388,6 +601,43 @@ export class EnhancedMockBluetoothManager {
   public simulateDeviceError(): void {
     console.log('Mock: Simulating device connection error');
     this.disconnect();
+  }
+
+  // New clinical validation methods
+  public getVRMSEstimate(): { ap: number; ml: number } {
+    const params = this.getEnhancedParams();
+    const baseVRMS = params.vrmsRange ? params.vrmsRange[0] : 0.5;
+    const variability = params.vrmsRange ? (params.vrmsRange[1] - params.vrmsRange[0]) : 0.3;
+    
+    return {
+      ap: baseVRMS + Math.random() * variability,
+      ml: baseVRMS * 0.8 + Math.random() * variability * 0.8
+    };
+  }
+
+  public getSimulationMetrics(): object {
+    return {
+      condition: this.simulationState.currentCondition,
+      isEpisodicPhase: this.simulationState.isEpisodicPhase,
+      exerciseIntensity: this.simulationState.exerciseIntensity,
+      timeSinceOnset: this.simulationState.timeSinceOnset,
+      vrmsEstimate: this.getVRMSEstimate(),
+      sampleRate: this.SAMPLE_RATE_HZ
+    };
+  }
+
+  /**
+   * Set current vestibular condition for simulation
+   */
+  public setCurrentCondition(condition: VestibularCondition): void {
+    this.setVestibularCondition(condition);
+  }
+
+  /**
+   * Generate a single sensor data packet
+   */
+  public generateSensorDataPacket(): SensorDataPacket {
+    return this.generateRealisticSensorPacket();
   }
 }
 

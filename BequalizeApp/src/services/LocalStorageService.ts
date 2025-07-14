@@ -241,6 +241,31 @@ export class LocalStorageService {
       throw error;
     }
   }
+
+  /**
+   * Generic method to store any data by key
+   */
+  public async setItem<T>(key: string, value: T): Promise<void> {
+    try {
+      await AsyncStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.error('Error storing item:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generic method to retrieve any data by key
+   */
+  public async getItem<T>(key: string): Promise<T | null> {
+    try {
+      const item = await AsyncStorage.getItem(key);
+      return item ? JSON.parse(item) : null;
+    } catch (error) {
+      console.error('Error retrieving item:', error);
+      return null;
+    }
+  }
 }
 
 // Statistics interface for progress tracking
