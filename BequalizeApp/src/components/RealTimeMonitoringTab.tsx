@@ -13,23 +13,18 @@ import SensorDataDisplay from './SensorDataDisplay';
 
 // Services
 import { EnhancedMockBluetoothManager } from '../services/EnhancedMockBluetoothManager';
-import { VestibularMLModel } from '../ml/VestibularMLModel';
 import { VestibularFeatureExtractor } from '../algorithms/VestibularFeatureExtractor';
+import { SignalProcessor } from '../algorithms/SignalProcessor';
 
 // Types
 import { 
   SensorDataPacket, 
   PosturalFeatures, 
   RespiratoryMetrics,
-  FallRiskAssessment,
-  ExerciseQualityScore,
-  ModelPrediction
 } from '../types/SensorData';
 
 interface RealTimeMonitoringTabProps {
   bluetoothManager: EnhancedMockBluetoothManager;
-  mlModel: VestibularMLModel | null;
-  isMLModelReady: boolean;
   isConnected: boolean;
   latestPacket: SensorDataPacket | null;
 }
@@ -37,18 +32,14 @@ interface RealTimeMonitoringTabProps {
 interface MonitoringState {
   isMonitoring: boolean;
   sensorBuffer: SensorDataPacket[];
-  lastPrediction: ModelPrediction | null;
   currentFeatures: PosturalFeatures | null;
   currentRespiratoryMetrics: RespiratoryMetrics | null;
   monitoringStartTime: number | null;
   totalSamples: number;
-  predictionHistory: ModelPrediction[];
 }
 
 const RealTimeMonitoringTab: React.FC<RealTimeMonitoringTabProps> = ({
   bluetoothManager,
-  mlModel,
-  isMLModelReady,
   isConnected,
   latestPacket
 }) => {
@@ -56,58 +47,26 @@ const RealTimeMonitoringTab: React.FC<RealTimeMonitoringTabProps> = ({
   const [monitoringState, setMonitoringState] = useState<MonitoringState>({
     isMonitoring: false,
     sensorBuffer: [],
-    lastPrediction: null,
     currentFeatures: null,
     currentRespiratoryMetrics: null,
     monitoringStartTime: null,
     totalSamples: 0,
-    predictionHistory: []
   });
 
   // Services
   const featureExtractor = useRef(new VestibularFeatureExtractor());
-  const predictionInterval = useRef<NodeJS.Timeout | null>(null);
+  const signalProcessor = useRef(new SignalProcessor());
 
   // Buffer management constants
   const BUFFER_SIZE = 250; // 5 seconds at 50Hz
-  const PREDICTION_INTERVAL_MS = 2000; // Predict every 2 seconds
 
-  // Add sensor data to buffer
+  // Add sensor data to buffer and compute features
   useEffect(() => {
     if (monitoringState.isMonitoring && latestPacket) {
-      setMonitoringState(prev => ({
-        ...prev,
-        sensorBuffer: [...prev.sensorBuffer.slice(-BUFFER_SIZE + 1), latestPacket],
-        totalSamples: prev.totalSamples + 1
-      }));
-    }
-  }, [latestPacket, monitoringState.isMonitoring]);
+      const nextBuffer = [...monitoringState.sensorBuffer.slice(-BUFFER_SIZE + 1), latestPacket];
 
-  // Run ML predictions periodically
-  useEffect(() => {
-    if (monitoringState.isMonitoring && isMLModelReady && mlModel) {
-      predictionInterval.current = setInterval(() => {
-        runMLPrediction();
-      }, PREDICTION_INTERVAL_MS);
-    } else {
-      if (predictionInterval.current) {
-        clearInterval(predictionInterval.current);
-      }
-    }
-
-    return () => {
-      if (predictionInterval.current) {
-        clearInterval(predictionInterval.current);
-      }
-    };
-  }, [monitoringState.isMonitoring, isMLModelReady, mlModel]);
-
-  const runMLPrediction = async () => {
-    if (!mlModel || monitoringState.sensorBuffer.length < 50) return;
-
-    try {
-      // Convert sensor data to IMU format
-      const imuData = monitoringState.sensorBuffer.map(packet => ({
+      // Convert to IMU and compute features
+      const imuData = nextBuffer.map(packet => ({
         timestamp: packet.timestamp,
         roll: Math.atan2(packet.accelerometer.y, packet.accelerometer.z) * (180 / Math.PI),
         pitch: Math.atan2(-packet.accelerometer.x, 
@@ -118,46 +77,23 @@ const RealTimeMonitoringTab: React.FC<RealTimeMonitoringTabProps> = ({
         gyro: packet.gyroscope
       }));
 
-      // Extract features
       const posturalFeatures = featureExtractor.current.extractPosturalFeatures(imuData);
-      const respiratoryMetrics = featureExtractor.current.extractRespiratoryMetrics(
-        monitoringState.sensorBuffer.map(p => p.elastometer_value)
-      );
+      const elastometerValues = nextBuffer.map(p => p.elastometer_value);
+      const respiratoryMetrics = signalProcessor.current.processRespiratorySignal(elastometerValues);
 
-      // Run ML prediction
-      const prediction = await mlModel.predict(posturalFeatures, respiratoryMetrics);
-
-      // Update state
       setMonitoringState(prev => ({
         ...prev,
-        lastPrediction: prediction,
+        sensorBuffer: nextBuffer,
+        totalSamples: prev.totalSamples + 1,
         currentFeatures: posturalFeatures,
         currentRespiratoryMetrics: respiratoryMetrics,
-        predictionHistory: [...prev.predictionHistory.slice(-19), prediction] // Keep last 20
       }));
-
-      // Handle high-risk alerts
-      if (prediction.fallRisk.risk_score > 0.7) {
-        Alert.alert(
-          'High Fall Risk Detected',
-          `Risk Score: ${(prediction.fallRisk.risk_score * 100).toFixed(0)}%\n\nRecommendations:\n${prediction.fallRisk.recommendations.slice(0, 2).join('\n')}`,
-          [{ text: 'OK' }]
-        );
-      }
-
-    } catch (error) {
-      console.error('ML prediction error:', error);
     }
-  };
+  }, [latestPacket, monitoringState.isMonitoring]);
 
   const startMonitoring = () => {
     if (!isConnected) {
       Alert.alert('Not Connected', 'Please connect to your Bequalize Belt first.');
-      return;
-    }
-
-    if (!isMLModelReady) {
-      Alert.alert('ML Model Not Ready', 'Please wait for the ML model to initialize.');
       return;
     }
 
@@ -167,7 +103,6 @@ const RealTimeMonitoringTab: React.FC<RealTimeMonitoringTabProps> = ({
       monitoringStartTime: Date.now(),
       sensorBuffer: [],
       totalSamples: 0,
-      predictionHistory: []
     }));
   };
 
@@ -176,18 +111,6 @@ const RealTimeMonitoringTab: React.FC<RealTimeMonitoringTabProps> = ({
       ...prev,
       isMonitoring: false
     }));
-  };
-
-  const getRiskColor = (riskScore: number): string => {
-    if (riskScore < 0.3) return '#28a745'; // Green - Low risk
-    if (riskScore < 0.6) return '#ffc107'; // Yellow - Medium risk
-    return '#dc3545'; // Red - High risk
-  };
-
-  const getQualityColor = (qualityScore: number): string => {
-    if (qualityScore >= 80) return '#28a745'; // Green - Excellent
-    if (qualityScore >= 60) return '#ffc107'; // Yellow - Good
-    return '#dc3545'; // Red - Needs improvement
   };
 
   const formatDuration = (startTime: number): string => {
@@ -203,9 +126,6 @@ const RealTimeMonitoringTab: React.FC<RealTimeMonitoringTabProps> = ({
       <Text style={styles.statusText}>
         Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
       </Text>
-      <Text style={styles.statusText}>
-        ML Model: {isMLModelReady ? '🧠 Ready' : '⏳ Loading...'}
-      </Text>
 
       {monitoringState.isMonitoring ? (
         <View style={styles.activeMonitoring}>
@@ -217,9 +137,6 @@ const RealTimeMonitoringTab: React.FC<RealTimeMonitoringTabProps> = ({
           <Text style={styles.monitoringStats}>
             📊 Samples: {monitoringState.totalSamples}
           </Text>
-          <Text style={styles.monitoringStats}>
-            🧠 Predictions: {monitoringState.predictionHistory.length}
-          </Text>
           
           <TouchableOpacity
             style={styles.stopButton}
@@ -230,84 +147,15 @@ const RealTimeMonitoringTab: React.FC<RealTimeMonitoringTabProps> = ({
         </View>
       ) : (
         <TouchableOpacity
-          style={[
-            styles.startButton,
-            (!isConnected || !isMLModelReady) && styles.disabledButton
-          ]}
+          style={[styles.startButton, !isConnected && styles.disabledButton]}
           onPress={startMonitoring}
-          disabled={!isConnected || !isMLModelReady}
+          disabled={!isConnected}
         >
           <Text style={styles.startButtonText}>▶️ Start Real-time Monitoring</Text>
         </TouchableOpacity>
       )}
     </View>
   );
-
-  const renderCurrentPrediction = () => {
-    if (!monitoringState.lastPrediction) return null;
-
-    const prediction = monitoringState.lastPrediction;
-
-    return (
-      <View style={styles.predictionCard}>
-        <Text style={styles.cardTitle}>🧠 Current Assessment</Text>
-        
-        {/* Fall Risk */}
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Fall Risk</Text>
-          <View style={[
-            styles.riskBadge,
-            { backgroundColor: getRiskColor(prediction.fallRisk.risk_score) }
-          ]}>
-            <Text style={styles.riskText}>
-              {(prediction.fallRisk.risk_score * 100).toFixed(0)}%
-            </Text>
-          </View>
-        </View>
-
-        {/* Exercise Quality */}
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Exercise Quality</Text>
-          <View style={[
-            styles.qualityBadge,
-            { backgroundColor: getQualityColor(prediction.exerciseQuality.overall_score) }
-          ]}>
-            <Text style={styles.qualityText}>
-              {prediction.exerciseQuality.overall_score.toFixed(0)}/100
-            </Text>
-          </View>
-        </View>
-
-        {/* Symptoms */}
-        <View style={styles.symptomsContainer}>
-          <Text style={styles.symptomsTitle}>Symptom Indicators</Text>
-          <View style={styles.symptomsList}>
-            <Text style={styles.symptomItem}>
-              Vertigo: {(prediction.symptomPrediction.vertigo * 100).toFixed(0)}%
-            </Text>
-            <Text style={styles.symptomItem}>
-              Imbalance: {(prediction.symptomPrediction.imbalance * 100).toFixed(0)}%
-            </Text>
-            <Text style={styles.symptomItem}>
-              Nausea: {(prediction.symptomPrediction.nausea * 100).toFixed(0)}%
-            </Text>
-          </View>
-        </View>
-
-        {/* Confidence */}
-        <View style={styles.confidenceContainer}>
-          <Text style={styles.confidenceLabel}>
-            Prediction Confidence: {(prediction.confidence * 100).toFixed(0)}%
-          </Text>
-        </View>
-
-        {/* Processing Time */}
-        <Text style={styles.processingTime}>
-          Processing: {prediction.processingTime.toFixed(1)}ms
-        </Text>
-      </View>
-    );
-  };
 
   const renderFeatures = () => {
     if (!monitoringState.currentFeatures || !monitoringState.currentRespiratoryMetrics) return null;
@@ -343,7 +191,7 @@ const RealTimeMonitoringTab: React.FC<RealTimeMonitoringTabProps> = ({
       <View style={styles.header}>
         <Text style={styles.title}>Real-time Monitoring</Text>
         <Text style={styles.subtitle}>
-          Live sensor data analysis with ML predictions
+          Live sensor data analysis (features only)
         </Text>
       </View>
 
@@ -357,7 +205,6 @@ const RealTimeMonitoringTab: React.FC<RealTimeMonitoringTabProps> = ({
         </View>
       )}
 
-      {renderCurrentPrediction()}
       {renderFeatures()}
 
       {/* Buffer Status */}
@@ -482,81 +329,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  predictionCard: {
-    backgroundColor: '#fff',
-    margin: 20,
-    padding: 20,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  metricRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  metricLabel: {
-    fontSize: 16,
-    color: '#495057',
-    fontWeight: '500',
-  },
-  riskBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  riskText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  qualityBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  qualityText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  symptomsContainer: {
-    marginTop: 16,
-  },
-  symptomsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#495057',
-    marginBottom: 8,
-  },
-  symptomsList: {
-    gap: 4,
-  },
-  symptomItem: {
-    fontSize: 14,
-    color: '#6c757d',
-  },
-  confidenceContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
-  },
-  confidenceLabel: {
-    fontSize: 14,
-    color: '#6c757d',
-    textAlign: 'center',
-  },
-  processingTime: {
-    fontSize: 12,
-    color: '#adb5bd',
-    textAlign: 'center',
-    marginTop: 8,
   },
   featuresCard: {
     backgroundColor: '#fff',

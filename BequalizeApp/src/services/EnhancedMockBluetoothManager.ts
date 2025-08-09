@@ -30,7 +30,27 @@ export class EnhancedMockBluetoothManager {
     isEpisodicPhase: false,
     timeSinceOnset: 15, // days since vestibular neuritis onset
     menieresEpisodeCounter: 0,
-    lastMenieresEpisode: 0
+    lastMenieresEpisode: 0,
+    
+    exerciseState: 'baseline' as 'baseline' | 'pre-test' | 'exercising' | 'post-test' | 'recovery',
+    exerciseStartTime: 0,
+    cumulativeExerciseTime: 0,
+    fatigueLevel: 0, // 0-1 scale
+    improvementFactor: 1.0, // Factor to simulate exercise benefits
+    sessionVariabilityFactor: Math.random(), // Unique per session
+    currentSessionId: '',
+    dataCollectionState: 'idle' as 'idle' | 'collecting-pre' | 'collecting-post',
+    
+    // NEW: Breathing exercise specific state
+    breathingExerciseActive: false,
+    breathingExerciseType: 'diaphragmatic' as 'diaphragmatic' | 'box_breathing' | 'coherence' | 'relaxation',
+    breathingPhase: 'rest' as 'inhale' | 'hold' | 'exhale' | 'rest',
+    breathingCycleStartTime: 0,
+    breathingPhaseStartTime: 0,
+    targetBreathingRate: 12, // bpm
+    breathingAmplitude: 1.0, // multiplier for breathing depth
+    breathingRegularity: 0.9, // 0-1 scale for how regular breathing is
+    userBreathingEffort: 1.0, // 0-1 scale for how well user follows pattern
   };
 
   // Enhanced vestibular condition parameters with clinical validation
@@ -335,6 +355,179 @@ export class EnhancedMockBluetoothManager {
     console.log('Mock: Triggered Menière\'s disease episode');
   }
 
+  /**
+   * NEW: Set exercise state for realistic pre/post differences
+   */
+  public setExerciseState(state: 'baseline' | 'pre-test' | 'exercising' | 'post-test' | 'recovery'): void {
+    console.log(`Mock: Setting exercise state to ${state}`);
+    this.simulationState.exerciseState = state;
+    
+    if (state === 'exercising') {
+      this.simulationState.exerciseStartTime = Date.now();
+    } else if (state === 'post-test') {
+      // Calculate exercise effects
+      const exerciseDuration = (Date.now() - this.simulationState.exerciseStartTime) / 1000;
+      this.simulationState.cumulativeExerciseTime += exerciseDuration;
+      
+      // Simulate fatigue (increases sway) and potential improvement (decreases sway)
+      this.simulationState.fatigueLevel = Math.min(1.0, exerciseDuration / 300); // 0-1 over 5 minutes
+      this.simulationState.improvementFactor = Math.max(0.7, 1.0 - (exerciseDuration / 600)); // Potential improvement
+    }
+  }
+
+  /**
+   * NEW: Set data collection state for session-specific modifications
+   */
+  public setDataCollectionState(state: 'idle' | 'collecting-pre' | 'collecting-post', sessionId?: string): void {
+    this.simulationState.dataCollectionState = state;
+    if (sessionId && sessionId !== this.simulationState.currentSessionId) {
+      this.simulationState.currentSessionId = sessionId;
+      this.simulationState.sessionVariabilityFactor = Math.random(); // New variability per session
+    }
+  }
+
+  /**
+   * NEW: Breathing Exercise Control Methods
+   */
+  public startBreathingExercise(
+    exerciseType: 'diaphragmatic' | 'box_breathing' | 'coherence' | 'relaxation',
+    targetRate?: number
+  ): void {
+    this.simulationState.breathingExerciseActive = true;
+    this.simulationState.breathingExerciseType = exerciseType;
+    this.simulationState.breathingCycleStartTime = Date.now();
+    this.simulationState.breathingPhaseStartTime = Date.now();
+    this.simulationState.breathingPhase = 'inhale';
+    
+    // Set exercise-specific parameters
+    const exerciseParams = this.getBreathingExerciseParams(exerciseType);
+    this.simulationState.targetBreathingRate = targetRate || exerciseParams.targetRate;
+    this.simulationState.breathingAmplitude = exerciseParams.amplitude;
+    this.simulationState.breathingRegularity = exerciseParams.regularity;
+    this.simulationState.userBreathingEffort = 0.7; // Start with moderate effort
+    
+    console.log(`🫁 Started breathing exercise: ${exerciseType} at ${this.simulationState.targetBreathingRate} bpm`);
+    console.log(`📊 Exercise parameters:`, {
+      amplitude: exerciseParams.amplitude,
+      regularity: exerciseParams.regularity,
+      phases: exerciseParams.phases
+    });
+  }
+
+  public stopBreathingExercise(): void {
+    this.simulationState.breathingExerciseActive = false;
+    this.simulationState.breathingPhase = 'rest';
+    console.log('🛑 Stopped breathing exercise');
+  }
+
+  public setBreathingPhase(phase: 'inhale' | 'hold' | 'exhale' | 'rest'): void {
+    if (this.simulationState.breathingExerciseActive) {
+      const previousPhase = this.simulationState.breathingPhase;
+      this.simulationState.breathingPhase = phase;
+      this.simulationState.breathingPhaseStartTime = Date.now();
+      console.log(`🔄 Breathing phase: ${previousPhase} → ${phase}`);
+    }
+  }
+
+  public setBreathingEffort(effort: number): void {
+    const previousEffort = this.simulationState.userBreathingEffort;
+    this.simulationState.userBreathingEffort = Math.max(0, Math.min(1, effort));
+    console.log(`💪 Breathing effort: ${(previousEffort * 100).toFixed(0)}% → ${(effort * 100).toFixed(0)}%`);
+  }
+
+  public updateBreathingCycle(): void {
+    if (this.simulationState.breathingExerciseActive) {
+      this.simulationState.breathingCycleStartTime = Date.now();
+      console.log('🔄 New breathing cycle started');
+    }
+  }
+
+  /**
+   * NEW: Debug and monitoring methods
+   */
+  public getBreathingExerciseStatus(): any {
+    return {
+      active: this.simulationState.breathingExerciseActive,
+      exerciseType: this.simulationState.breathingExerciseType,
+      currentPhase: this.simulationState.breathingPhase,
+      targetRate: this.simulationState.targetBreathingRate,
+      amplitude: this.simulationState.breathingAmplitude,
+      regularity: this.simulationState.breathingRegularity,
+      userEffort: this.simulationState.userBreathingEffort,
+      phaseElapsed: (Date.now() - this.simulationState.breathingPhaseStartTime) / 1000,
+      cycleElapsed: (Date.now() - this.simulationState.breathingCycleStartTime) / 1000
+    };
+  }
+
+  public simulateBreathingDifficulty(difficulty: 'easy' | 'medium' | 'hard'): void {
+    switch (difficulty) {
+      case 'easy':
+        this.simulationState.breathingRegularity = 0.95;
+        this.simulationState.userBreathingEffort = 0.9;
+        break;
+      case 'medium':
+        this.simulationState.breathingRegularity = 0.8;
+        this.simulationState.userBreathingEffort = 0.7;
+        break;
+      case 'hard':
+        this.simulationState.breathingRegularity = 0.6;
+        this.simulationState.userBreathingEffort = 0.5;
+        break;
+    }
+    console.log(`🎯 Simulating ${difficulty} breathing difficulty`);
+  }
+
+  private getBreathingExerciseParams(exerciseType: 'diaphragmatic' | 'box_breathing' | 'coherence' | 'relaxation') {
+    const exerciseParameters = {
+      diaphragmatic: {
+        targetRate: 8,        // 8 bpm - slow, deep breathing
+        amplitude: 1.4,       // 40% more expansion
+        regularity: 0.85,     // Slightly irregular as user learns
+        phases: {
+          inhale: { duration: 4, amplitude: 1.4 },
+          hold: { duration: 2, amplitude: 1.4 },
+          exhale: { duration: 6, amplitude: 0.3 },
+          rest: { duration: 2, amplitude: 0.1 }
+        }
+      },
+      box_breathing: {
+        targetRate: 7.5,      // 7.5 bpm - very controlled
+        amplitude: 1.2,       // Moderate expansion
+        regularity: 0.95,     // Very regular pattern
+        phases: {
+          inhale: { duration: 4, amplitude: 1.2 },
+          hold: { duration: 4, amplitude: 1.2 },
+          exhale: { duration: 4, amplitude: 0.2 },
+          rest: { duration: 4, amplitude: 0.1 }
+        }
+      },
+      coherence: {
+        targetRate: 6,        // 6 bpm - heart rate coherence
+        amplitude: 1.1,       // Gentle expansion
+        regularity: 0.92,     // Smooth, rhythmic
+        phases: {
+          inhale: { duration: 5, amplitude: 1.1 },
+          hold: { duration: 0, amplitude: 1.1 },
+          exhale: { duration: 5, amplitude: 0.2 },
+          rest: { duration: 0, amplitude: 0.1 }
+        }
+      },
+      relaxation: {
+        targetRate: 5,        // 5 bpm - very slow for relaxation
+        amplitude: 1.3,       // Deep, relaxing breaths
+        regularity: 0.88,     // Naturally variable 
+        phases: {
+          inhale: { duration: 4, amplitude: 1.3 },
+          hold: { duration: 2, amplitude: 1.3 },
+          exhale: { duration: 8, amplitude: 0.3 },
+          rest: { duration: 2, amplitude: 0.1 }
+        }
+      }
+    };
+
+    return exerciseParameters[exerciseType];
+  }
+
   // Private methods for data generation
   private startDataGeneration(): void {
     if (this.intervalId) {
@@ -414,45 +607,117 @@ export class EnhancedMockBluetoothManager {
         break;
     }
     
+    // NEW: Apply exercise state modifications
+    params = this.applyExerciseStateModifications(params);
+    
     return params;
+  }
+
+  /**
+   * NEW: Apply exercise state modifications to simulation parameters
+   */
+  private applyExerciseStateModifications(params: any): any {
+    const modifiedParams = { ...params };
+    const { exerciseState, fatigueLevel, improvementFactor, sessionVariabilityFactor, dataCollectionState } = this.simulationState;
+    
+    // Base variability factor for each session
+    const baseVariability = 0.8 + (sessionVariabilityFactor * 0.4); // 0.8 to 1.2
+    
+    // Apply exercise-specific modifications
+    switch (exerciseState) {
+      case 'pre-test':
+        // Pre-test: baseline with slight anticipation/anxiety increase
+        modifiedParams.swayAmplitude *= baseVariability * 1.1;
+        modifiedParams.swayFrequency *= 1.05;
+        modifiedParams.stabilityIndex *= 0.95;
+        break;
+        
+      case 'exercising':
+        // During exercise: increased variability and challenge
+        modifiedParams.swayAmplitude *= baseVariability * 1.3;
+        modifiedParams.swayFrequency *= 1.2;
+        modifiedParams.stabilityIndex *= 0.8;
+        break;
+        
+      case 'post-test':
+        // Post-test: fatigue vs improvement effects
+        const fatigueEffect = 1.0 + (fatigueLevel * 0.4); // 1.0 to 1.4
+        const improvementEffect = improvementFactor; // 0.7 to 1.0
+        
+        // Fatigue typically increases sway, improvement decreases it
+        const netEffect = fatigueEffect * improvementEffect;
+        modifiedParams.swayAmplitude *= baseVariability * netEffect;
+        modifiedParams.swayFrequency *= 0.9 + (fatigueLevel * 0.2); // Slower when fatigued
+        modifiedParams.stabilityIndex *= improvementEffect * (1 - fatigueLevel * 0.2);
+        break;
+        
+      case 'recovery':
+        // Recovery: gradual return to baseline
+        modifiedParams.swayAmplitude *= baseVariability * 0.9;
+        modifiedParams.swayFrequency *= 0.95;
+        modifiedParams.stabilityIndex *= 1.05;
+        break;
+        
+      default:
+        // Baseline: normal parameters with session variability
+        modifiedParams.swayAmplitude *= baseVariability;
+        break;
+    }
+    
+    // Add additional variability based on data collection state
+    if (dataCollectionState === 'collecting-pre') {
+      // Pre-test data: slightly more consistent (less variability)
+      modifiedParams.swayAmplitude *= 0.9;
+      modifiedParams.noiseLevel = (modifiedParams.noiseLevel || 1.0) * 0.8;
+    } else if (dataCollectionState === 'collecting-post') {
+      // Post-test data: more variability due to fatigue/changes
+      modifiedParams.swayAmplitude *= 1.1;
+      modifiedParams.noiseLevel = (modifiedParams.noiseLevel || 1.0) * 1.2;
+    }
+    
+    return modifiedParams;
   }
 
   private generateAccelerometerData(elapsedSeconds: number, params: any): { x: number; y: number; z: number } {
     // Base gravity component (device assumed to be on torso)
     const baseGravity = { x: 0, y: 0, z: 980 }; // mg units
     
+    // Add session-specific phase offset for variability
+    const phaseOffset = this.simulationState.sessionVariabilityFactor * 2 * Math.PI;
+    
     // Add postural sway based on condition
-    const swayX = params.swayAmplitude * 100 * Math.sin(2 * Math.PI * params.swayFrequency * elapsedSeconds);
-    const swayY = params.swayAmplitude * 80 * Math.cos(2 * Math.PI * params.swayFrequency * elapsedSeconds * 0.7);
+    const swayX = params.swayAmplitude * 100 * Math.sin(2 * Math.PI * params.swayFrequency * elapsedSeconds + phaseOffset);
+    const swayY = params.swayAmplitude * 80 * Math.cos(2 * Math.PI * params.swayFrequency * elapsedSeconds * 0.7 + phaseOffset * 0.5);
     
     // Add condition-specific patterns
     let conditionModifierX = 0;
     let conditionModifierY = 0;
     
     if (params.asymmetricPattern || params.medioLateralBias) {
-      conditionModifierX = params.swayAmplitude * 50 * Math.sin(2 * Math.PI * 0.3 * elapsedSeconds);
+      conditionModifierX = params.swayAmplitude * 50 * Math.sin(2 * Math.PI * 0.3 * elapsedSeconds + phaseOffset);
     }
     
     if (params.rotationalComponent) {
-      conditionModifierX += params.swayAmplitude * 30 * Math.sin(2 * Math.PI * 2.0 * elapsedSeconds);
-      conditionModifierY += params.swayAmplitude * 30 * Math.cos(2 * Math.PI * 2.0 * elapsedSeconds);
+      conditionModifierX += params.swayAmplitude * 30 * Math.sin(2 * Math.PI * 2.0 * elapsedSeconds + phaseOffset);
+      conditionModifierY += params.swayAmplitude * 30 * Math.cos(2 * Math.PI * 2.0 * elapsedSeconds + phaseOffset);
     }
     
     if (params.highFrequencyTremor) {
-      conditionModifierX += 20 * Math.sin(2 * Math.PI * 8 * elapsedSeconds);
-      conditionModifierY += 20 * Math.cos(2 * Math.PI * 8 * elapsedSeconds);
+      conditionModifierX += 20 * Math.sin(2 * Math.PI * 8 * elapsedSeconds + phaseOffset);
+      conditionModifierY += 20 * Math.cos(2 * Math.PI * 8 * elapsedSeconds + phaseOffset);
     }
 
     // Add low frequency bias for Menière's disease
     if (params.lowFrequencyBias) {
-      conditionModifierX += params.swayAmplitude * 40 * Math.sin(2 * Math.PI * 0.2 * elapsedSeconds);
-      conditionModifierY += params.swayAmplitude * 40 * Math.cos(2 * Math.PI * 0.15 * elapsedSeconds);
+      conditionModifierX += params.swayAmplitude * 40 * Math.sin(2 * Math.PI * 0.2 * elapsedSeconds + phaseOffset);
+      conditionModifierY += params.swayAmplitude * 40 * Math.cos(2 * Math.PI * 0.15 * elapsedSeconds + phaseOffset);
     }
 
-    // Add realistic noise
-    const noiseX = (Math.random() - 0.5) * 10;
-    const noiseY = (Math.random() - 0.5) * 10;
-    const noiseZ = (Math.random() - 0.5) * 5;
+    // Add realistic noise with exercise state modulation
+    const noiseLevel = (params.noiseLevel || 1.0);
+    const noiseX = (Math.random() - 0.5) * 10 * noiseLevel;
+    const noiseY = (Math.random() - 0.5) * 10 * noiseLevel;
+    const noiseZ = (Math.random() - 0.5) * 5 * noiseLevel;
 
     return {
       x: Math.round(baseGravity.x + swayX + conditionModifierX + noiseX),
@@ -463,22 +728,25 @@ export class EnhancedMockBluetoothManager {
 
   private generateGyroscopeData(elapsedSeconds: number, params: any): { x: number; y: number; z: number } {
     // Angular velocity in degrees/second * 100 (scaled values)
+    const phaseOffset = this.simulationState.sessionVariabilityFactor * 2 * Math.PI;
+    
     const baseSwayVelocity = {
-      x: params.swayAmplitude * 50 * Math.cos(2 * Math.PI * params.swayFrequency * elapsedSeconds),
-      y: params.swayAmplitude * 40 * Math.sin(2 * Math.PI * params.swayFrequency * elapsedSeconds * 0.8),
+      x: params.swayAmplitude * 50 * Math.cos(2 * Math.PI * params.swayFrequency * elapsedSeconds + phaseOffset),
+      y: params.swayAmplitude * 40 * Math.sin(2 * Math.PI * params.swayFrequency * elapsedSeconds * 0.8 + phaseOffset),
       z: 0
     };
 
     // Add condition-specific patterns
     if (params.rotationalComponent) {
-      baseSwayVelocity.z = params.swayAmplitude * 60 * Math.sin(2 * Math.PI * 1.5 * elapsedSeconds);
+      baseSwayVelocity.z = params.swayAmplitude * 60 * Math.sin(2 * Math.PI * 1.5 * elapsedSeconds + phaseOffset);
     }
 
-    // Add noise
+    // Add noise with exercise state modulation
+    const noiseLevel = (params.noiseLevel || 1.0);
     const noise = {
-      x: (Math.random() - 0.5) * 20,
-      y: (Math.random() - 0.5) * 20,
-      z: (Math.random() - 0.5) * 15
+      x: (Math.random() - 0.5) * 20 * noiseLevel,
+      y: (Math.random() - 0.5) * 20 * noiseLevel,
+      z: (Math.random() - 0.5) * 15 * noiseLevel
     };
 
     return {
@@ -489,16 +757,21 @@ export class EnhancedMockBluetoothManager {
   }
 
   private generateElastometerData(elapsedSeconds: number, params: any): number {
-    // Base respiratory signal
+    // If breathing exercise is active, use specialized generation
+    if (this.simulationState.breathingExerciseActive) {
+      return this.generateBreathingExerciseElastometerData(elapsedSeconds);
+    }
+    
+    // Base respiratory signal for normal conditions
     const breathingPeriod = 60 / params.respiratoryRate; // seconds per breath
     const breathingPhase = (elapsedSeconds % breathingPeriod) / breathingPeriod;
     
     // Generate realistic breathing waveform (not perfect sine wave)
-    let respiratorySignal = 2048; // baseline
+    let respiratorySignal = 2048; // baseline (12-bit ADC center)
     
     if (breathingPhase < 0.4) {
-      // Inspiration phase (shorter)
-      respiratorySignal += 300 * Math.sin(Math.PI * breathingPhase / 0.4);
+      // Inspiration phase (shorter, steeper)
+      respiratorySignal += 400 * Math.sin(Math.PI * breathingPhase / 0.4);
     } else {
       // Expiration phase (longer, more gradual)
       respiratorySignal += 300 * Math.sin(Math.PI * (1 - (breathingPhase - 0.4) / 0.6));
@@ -510,12 +783,14 @@ export class EnhancedMockBluetoothManager {
       respiratorySignal += irregularity;
     }
 
-    // Add exercise-induced breathing changes
-    const exerciseEffect = this.simulationState.exerciseIntensity * 100;
-    respiratorySignal += exerciseEffect;
+    // Add exercise-related changes in breathing
+    if (this.simulationState.exerciseState === 'exercising') {
+      respiratorySignal += 80 * Math.sin(2 * Math.PI * 0.05 * elapsedSeconds); // Heavier breathing
+    }
 
-    // Add noise
+    // Add realistic noise
     const noise = (Math.random() - 0.5) * 20;
+    respiratorySignal += noise;
     
     // Check for meaningful data (as mentioned in documentation)
     const meaningfulDataCheck = this.simulationState.isCalibrating ? 
@@ -526,7 +801,85 @@ export class EnhancedMockBluetoothManager {
       respiratorySignal = 2048 + (Math.random() - 0.5) * 30;
     }
 
-    return Math.round(Math.max(1500, Math.min(2600, respiratorySignal + noise)));
+    return Math.round(Math.max(1800, Math.min(2300, respiratorySignal)));
+  }
+
+  private generateBreathingExerciseElastometerData(elapsedSeconds: number): number {
+    const exerciseParams = this.getBreathingExerciseParams(this.simulationState.breathingExerciseType);
+    const phaseInfo = exerciseParams.phases[this.simulationState.breathingPhase];
+    
+    // Base respiratory signal
+    let respiratorySignal = 2048; // 12-bit ADC center
+    
+    // Time within current phase
+    const phaseElapsed = (Date.now() - this.simulationState.breathingPhaseStartTime) / 1000;
+    const phaseProgress = Math.min(1, phaseElapsed / (phaseInfo?.duration || 1));
+    
+    // Generate phase-specific waveform
+    switch (this.simulationState.breathingPhase) {
+      case 'inhale':
+        // Smooth increase to maximum expansion
+        const inhaleProgress = Math.sin((phaseProgress * Math.PI) / 2); // Ease-out curve
+        respiratorySignal += (phaseInfo?.amplitude || 1) * 350 * inhaleProgress * this.simulationState.userBreathingEffort;
+        break;
+        
+      case 'hold':
+        // Maintain expansion with slight variation
+        const holdVariation = 10 * Math.sin(2 * Math.PI * 3 * phaseElapsed); // 3Hz micro-variations
+        respiratorySignal += (phaseInfo?.amplitude || 1) * 350 * this.simulationState.userBreathingEffort + holdVariation;
+        break;
+        
+      case 'exhale':
+        // Smooth decrease from maximum to baseline
+        const exhaleProgress = Math.cos((phaseProgress * Math.PI) / 2); // Ease-in curve
+        respiratorySignal += (phaseInfo?.amplitude || 1) * 350 * exhaleProgress * this.simulationState.userBreathingEffort;
+        break;
+        
+      case 'rest':
+        // Near baseline with minimal variation
+        const restVariation = 5 * Math.sin(2 * Math.PI * 2 * phaseElapsed);
+        respiratorySignal += restVariation;
+        break;
+    }
+    
+    // Add exercise-specific characteristics
+    const exerciseModifier = this.getExerciseSpecificModifier(elapsedSeconds);
+    respiratorySignal += exerciseModifier;
+    
+    // Add user effort and regularity variations
+    const effortVariation = (1 - this.simulationState.userBreathingEffort) * 50 * (Math.random() - 0.5);
+    const regularityVariation = (1 - this.simulationState.breathingRegularity) * 30 * Math.sin(2 * Math.PI * 0.1 * elapsedSeconds);
+    
+    respiratorySignal += effortVariation + regularityVariation;
+    
+    // Add realistic sensor noise
+    const noise = (Math.random() - 0.5) * 15;
+    respiratorySignal += noise;
+    
+    return Math.round(Math.max(1800, Math.min(2300, respiratorySignal)));
+  }
+  
+  private getExerciseSpecificModifier(elapsedSeconds: number): number {
+    switch (this.simulationState.breathingExerciseType) {
+      case 'diaphragmatic':
+        // Deeper, more abdominal breathing pattern
+        return 20 * Math.sin(2 * Math.PI * 0.05 * elapsedSeconds); // Low frequency deep component
+        
+      case 'box_breathing':
+        // Very controlled, minimal variation
+        return 5 * Math.sin(2 * Math.PI * 0.02 * elapsedSeconds); // Very low variation
+        
+      case 'coherence':
+        // Smooth, sine-wave like pattern for heart rate coherence
+        return 15 * Math.sin(2 * Math.PI * 0.1 * elapsedSeconds); // Coherent pattern
+        
+      case 'relaxation':
+        // Slow, deep, calming breaths
+        return 25 * Math.sin(2 * Math.PI * 0.03 * elapsedSeconds); // Very slow, deep pattern
+        
+      default:
+        return 0;
+    }
   }
 
   private generateButtonState(elapsedSeconds: number): number {

@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 
 // Components
-import SensorDataDisplay from './src/components/SensorDataDisplay';
 import BalanceTestingTab from './src/components/BalanceTestingTab';
 import BreathingExerciseTab from './src/components/BreathingExerciseTab';
 import RealTimeMonitoringTab from './src/components/RealTimeMonitoringTab';
@@ -24,10 +23,9 @@ import RealTimeMonitoringTab from './src/components/RealTimeMonitoringTab';
 // Services
 import { EnhancedMockBluetoothManager } from './src/services/EnhancedMockBluetoothManager';
 import { LocalStorageService } from './src/services/LocalStorageService';
-import { VestibularMLModel } from './src/ml/VestibularMLModel';
 
 // Types
-import { SensorDataPacket, ExerciseType } from './src/types/SensorData';
+import { SensorDataPacket } from './src/types/SensorData';
 
 type TabType = 'balance' | 'breathing' | 'monitoring';
 
@@ -37,10 +35,6 @@ const App: React.FC = () => {
   const [latestPacket, setLatestPacket] = useState<SensorDataPacket | null>(null);
   const [currentTab, setCurrentTab] = useState<TabType>('balance');
 
-  // ML Model state
-  const [isMLModelReady, setIsMLModelReady] = useState(false);
-  const [mlModel, setMLModel] = useState<VestibularMLModel | null>(null);
-
   // Services
   const bluetoothManager = useRef(new EnhancedMockBluetoothManager());
   const storageService = useRef(new LocalStorageService());
@@ -48,29 +42,12 @@ const App: React.FC = () => {
   useEffect(() => {
     const initializeServices = async () => {
       try {
-                 // Initialize ML Model
-         const initializeONNXModel = async () => {
-           try {
-             const model = new VestibularMLModel();
-             await model.initializeModel();
-             await model.buildModel();
-             setMLModel(model);
-             setIsMLModelReady(true);
-             console.log('✅ ONNX ML Model initialized successfully');
-           } catch (error) {
-             console.warn('⚠️ ML Model initialization failed:', error);
-             setIsMLModelReady(false);
-           }
-         };
+        // Setup Bluetooth data handler
+        const handleSensorData = (packet: SensorDataPacket) => {
+          setLatestPacket(packet);
+        };
 
-         await initializeONNXModel();
-
-         // Setup Bluetooth data handler
-         const handleSensorData = (packet: SensorDataPacket) => {
-           setLatestPacket(packet);
-         };
-
-         bluetoothManager.current.addDataListener(handleSensorData);
+        bluetoothManager.current.addDataListener(handleSensorData);
 
         // Start connection
         const startConnection = async () => {
@@ -137,8 +114,6 @@ const App: React.FC = () => {
         return (
           <RealTimeMonitoringTab
             bluetoothManager={bluetoothManager.current}
-            mlModel={mlModel}
-            isMLModelReady={isMLModelReady}
             isConnected={isConnected}
             latestPacket={latestPacket}
           />

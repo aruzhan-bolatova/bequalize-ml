@@ -80,6 +80,9 @@ export class TestRetestManager {
   constructor() {
     this.featureExtractor = new VestibularFeatureExtractor();
     this.storageService = new LocalStorageService();
+    
+    // Run validation tests on initialization
+    this.validateCalculations();
   }
 
   /**
@@ -111,6 +114,27 @@ export class TestRetestManager {
     duration: number
   ): Promise<TestSession> {
     
+    console.log(`🔍 TestRetestManager: Starting ${testType}-exercise session analysis`);
+    console.log(`📊 Sensor data samples: ${sensorData.length}`);
+    
+    // Log sample sensor data for debugging
+    if (sensorData.length > 0) {
+      const firstSample = sensorData[0];
+      const lastSample = sensorData[sensorData.length - 1];
+      console.log(`📈 First sample - Accel: (${firstSample.accelerometer.x}, ${firstSample.accelerometer.y}, ${firstSample.accelerometer.z})`);
+      console.log(`📈 Last sample - Accel: (${lastSample.accelerometer.x}, ${lastSample.accelerometer.y}, ${lastSample.accelerometer.z})`);
+      
+      // Calculate basic statistics
+      const accelXValues = sensorData.map(p => p.accelerometer.x);
+      const accelYValues = sensorData.map(p => p.accelerometer.y);
+      const meanX = accelXValues.reduce((sum, val) => sum + val, 0) / accelXValues.length;
+      const meanY = accelYValues.reduce((sum, val) => sum + val, 0) / accelYValues.length;
+      const stdX = Math.sqrt(accelXValues.reduce((sum, val) => sum + Math.pow(val - meanX, 2), 0) / accelXValues.length);
+      const stdY = Math.sqrt(accelYValues.reduce((sum, val) => sum + Math.pow(val - meanY, 2), 0) / accelYValues.length);
+      
+      console.log(`📊 Accel stats - X: mean=${meanX.toFixed(1)}, std=${stdX.toFixed(1)}, Y: mean=${meanY.toFixed(1)}, std=${stdY.toFixed(1)}`);
+    }
+    
     // Convert sensor data to IMU format for feature extraction
     const imuData = sensorData.map(packet => ({
       timestamp: packet.timestamp,
@@ -123,15 +147,45 @@ export class TestRetestManager {
       gyro: packet.gyroscope
     }));
 
+    // Log IMU conversion results
+    if (imuData.length > 0) {
+      const rollValues = imuData.map(d => d.roll);
+      const pitchValues = imuData.map(d => d.pitch);
+      const meanRoll = rollValues.reduce((sum, val) => sum + val, 0) / rollValues.length;
+      const meanPitch = pitchValues.reduce((sum, val) => sum + val, 0) / pitchValues.length;
+      const stdRoll = Math.sqrt(rollValues.reduce((sum, val) => sum + Math.pow(val - meanRoll, 2), 0) / rollValues.length);
+      const stdPitch = Math.sqrt(pitchValues.reduce((sum, val) => sum + Math.pow(val - meanPitch, 2), 0) / pitchValues.length);
+      
+      console.log(`🎯 IMU angles - Roll: mean=${meanRoll.toFixed(2)}°, std=${stdRoll.toFixed(2)}°, Pitch: mean=${meanPitch.toFixed(2)}°, std=${stdPitch.toFixed(2)}°`);
+    }
+
     // Extract postural features including confidence ellipse area
     const posturalFeatures = this.featureExtractor.extractPosturalFeatures(imuData);
+    
+    // Log extracted features
+    console.log(`🔬 Extracted features for ${testType}-test:`);
+    console.log(`   - Sway Area: ${posturalFeatures.swayArea.toFixed(2)} cm²`);
+    console.log(`   - Sway Path Length: ${posturalFeatures.swayPathLength.toFixed(2)} cm`);
+    console.log(`   - Sway Velocity: ${posturalFeatures.swayVelocity.toFixed(2)} cm/s`);
+    console.log(`   - Stability Index: ${posturalFeatures.stabilityIndex.toFixed(3)}`);
+    console.log(`   - AP Sway: ${posturalFeatures.anteriorPosteriorSway.toFixed(2)} cm`);
+    console.log(`   - ML Sway: ${posturalFeatures.medioLateralSway.toFixed(2)} cm`);
+    console.log(`   - Frequency Peaks: [${posturalFeatures.frequencyPeaks.map(f => f.toFixed(2)).join(', ')}] Hz`);
     
     // Convert area from internal units to cm² for clinical interpretation
     const confidenceEllipseArea = posturalFeatures.swayArea;
     const normalizedEllipseArea = this.normalizeEllipseArea(confidenceEllipseArea);
+    
+    console.log(`📏 Confidence ellipse area: ${confidenceEllipseArea.toFixed(2)} cm² (normalized: ${normalizedEllipseArea.toFixed(2)})`);
 
     // Generate detailed sway path and confidence ellipse data
     const { swayPath, confidenceEllipse } = this.extractSwayPathAndEllipse(imuData, posturalFeatures);
+    
+    console.log(`🎪 Confidence ellipse parameters:`);
+    console.log(`   - Center: (${confidenceEllipse.centerX.toFixed(2)}, ${confidenceEllipse.centerY.toFixed(2)}) mm`);
+    console.log(`   - Semi-axes: A=${confidenceEllipse.semiAxisA.toFixed(2)}mm, B=${confidenceEllipse.semiAxisB.toFixed(2)}mm`);
+    console.log(`   - Rotation: ${(confidenceEllipse.rotation * 180 / Math.PI).toFixed(1)}°`);
+    console.log(`   - Sway path points: ${swayPath.length}`);
 
     const session: TestSession = {
       sessionId,
@@ -154,6 +208,7 @@ export class TestRetestManager {
     await this.saveTestSession(session);
     
     console.log(`✅ Completed ${testType}-exercise test: Ellipse area = ${confidenceEllipseArea.toFixed(2)} cm²`);
+    console.log(`🏷️  Session ${sessionId} stored successfully`);
     
     return session;
   }
@@ -166,19 +221,29 @@ export class TestRetestManager {
     postSessionId: string
   ): Promise<SessionComparison> {
     
+    console.log(`🔍 TestRetestManager: Comparing sessions ${preSessionId} vs ${postSessionId}`);
+    
     const preSession = await this.getTestSession(preSessionId);
     const postSession = await this.getTestSession(postSessionId);
     
     if (!preSession || !postSession) {
       throw new Error('Sessions not found for comparison');
     }
+    
+    console.log(`📊 Pre-session ellipse area: ${preSession.confidenceEllipseArea.toFixed(2)} cm²`);
+    console.log(`📊 Post-session ellipse area: ${postSession.confidenceEllipseArea.toFixed(2)} cm²`);
 
     // Calculate changes
     const ellipseAreaChange = postSession.confidenceEllipseArea - preSession.confidenceEllipseArea;
     const percentageChange = (ellipseAreaChange / preSession.confidenceEllipseArea) * 100;
     
+    console.log(`📈 Changes calculated:`);
+    console.log(`   - Absolute change: ${ellipseAreaChange > 0 ? '+' : ''}${ellipseAreaChange.toFixed(2)} cm²`);
+    console.log(`   - Percentage change: ${percentageChange > 0 ? '+' : ''}${percentageChange.toFixed(1)}%`);
+    
     // Categorize improvement
     const improvementCategory = this.categorizeImprovement(percentageChange);
+    console.log(`   - Category: ${improvementCategory}`);
     
     // Generate clinical interpretation
     const clinicalInterpretation = this.generateClinicalInterpretation(
@@ -189,6 +254,9 @@ export class TestRetestManager {
     const recommendations = this.generateRecommendations(
       preSession, postSession, improvementCategory
     );
+    
+    console.log(`📋 Clinical interpretation: ${clinicalInterpretation}`);
+    console.log(`💡 Recommendations: ${recommendations.length} items generated`);
 
     const comparison: SessionComparison = {
       preSession,
@@ -203,6 +271,8 @@ export class TestRetestManager {
 
     // Store comparison
     await this.saveSessionComparison(comparison);
+    
+    console.log(`✅ Session comparison completed and stored`);
     
     return comparison;
   }
@@ -421,6 +491,84 @@ export class TestRetestManager {
   }
 
   /**
+   * Validation method to test sway area calculations with different data sets
+   */
+  public validateCalculations(): void {
+    console.log('🧪 TestRetestManager: Running calculation validation tests...');
+    
+    // Test 1: Small sway data (should have small area)
+    const smallSwayData = this.generateTestIMUData(50, 0.5, 0.5); // 50 samples, 0.5° amplitude
+    const smallSwayFeatures = this.featureExtractor.extractPosturalFeatures(smallSwayData);
+    
+    // Test 2: Large sway data (should have large area)
+    const largeSwayData = this.generateTestIMUData(50, 2.0, 2.0); // 50 samples, 2.0° amplitude
+    const largeSwayFeatures = this.featureExtractor.extractPosturalFeatures(largeSwayData);
+    
+    // Test 3: Identical data (should have identical results)
+    const identicalData1 = this.generateTestIMUData(50, 1.0, 1.0);
+    const identicalData2 = [...identicalData1]; // Copy the same data
+    const identicalFeatures1 = this.featureExtractor.extractPosturalFeatures(identicalData1);
+    const identicalFeatures2 = this.featureExtractor.extractPosturalFeatures(identicalData2);
+    
+    console.log('📊 Validation Results:');
+    console.log(`   Small sway area: ${smallSwayFeatures.swayArea.toFixed(3)} cm²`);
+    console.log(`   Large sway area: ${largeSwayFeatures.swayArea.toFixed(3)} cm²`);
+    console.log(`   Identical data 1: ${identicalFeatures1.swayArea.toFixed(3)} cm²`);
+    console.log(`   Identical data 2: ${identicalFeatures2.swayArea.toFixed(3)} cm²`);
+    
+    // Validation checks
+    const checks = {
+      largeVsSmall: largeSwayFeatures.swayArea > smallSwayFeatures.swayArea,
+      identicalMatch: Math.abs(identicalFeatures1.swayArea - identicalFeatures2.swayArea) < 0.001,
+      positiveValues: smallSwayFeatures.swayArea > 0 && largeSwayFeatures.swayArea > 0,
+      reasonableRange: smallSwayFeatures.swayArea < 100 && largeSwayFeatures.swayArea < 100
+    };
+    
+    console.log('✅ Validation Checks:');
+    console.log(`   Large > Small: ${checks.largeVsSmall ? 'PASS' : 'FAIL'}`);
+    console.log(`   Identical Match: ${checks.identicalMatch ? 'PASS' : 'FAIL'}`);
+    console.log(`   Positive Values: ${checks.positiveValues ? 'PASS' : 'FAIL'}`);
+    console.log(`   Reasonable Range: ${checks.reasonableRange ? 'PASS' : 'FAIL'}`);
+    
+    const allTestsPassed = Object.values(checks).every(check => check);
+    console.log(`🎯 Overall Validation: ${allTestsPassed ? 'ALL TESTS PASSED' : 'SOME TESTS FAILED'}`);
+  }
+
+  /**
+   * Generate test IMU data with specified parameters
+   */
+  private generateTestIMUData(sampleCount: number, rollAmplitude: number, pitchAmplitude: number): any[] {
+    const data: any[] = [];
+    const sampleRate = 50; // Hz
+    const duration = sampleCount / sampleRate;
+    
+    for (let i = 0; i < sampleCount; i++) {
+      const t = i / sampleRate;
+      const roll = rollAmplitude * Math.sin(2 * Math.PI * 0.5 * t); // 0.5 Hz oscillation
+      const pitch = pitchAmplitude * Math.cos(2 * Math.PI * 0.7 * t); // 0.7 Hz oscillation
+      
+      data.push({
+        timestamp: Date.now() + i * (1000 / sampleRate),
+        roll,
+        pitch,
+        yaw: 0,
+        accel: {
+          x: -Math.sin(pitch * Math.PI / 180) * 980,
+          y: Math.sin(roll * Math.PI / 180) * 980,
+          z: Math.cos(roll * Math.PI / 180) * Math.cos(pitch * Math.PI / 180) * 980
+        },
+        gyro: {
+          x: rollAmplitude * Math.PI / 180 * Math.cos(2 * Math.PI * 0.5 * t),
+          y: pitchAmplitude * Math.PI / 180 * Math.sin(2 * Math.PI * 0.7 * t),
+          z: 0
+        }
+      });
+    }
+    
+    return data;
+  }
+
+  /**
    * Storage methods
    */
   private async saveTestSession(session: TestSession): Promise<void> {
@@ -525,4 +673,4 @@ export class TestRetestManager {
 
     return { swayPath, confidenceEllipse };
   }
-} 
+}

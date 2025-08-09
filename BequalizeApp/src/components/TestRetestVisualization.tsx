@@ -3,8 +3,8 @@
  * Displays confidence ellipse area changes, progress insights, and longitudinal data
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import { TestSession, SessionComparison, LongitudinalProgress } from '../services/TestRetestManager';
 import PosturalSwayVisualization from './PosturalSwayVisualization';
@@ -16,6 +16,8 @@ interface TestRetestVisualizationProps {
   showSwayVisualization?: boolean;
 }
 
+type SwayViewTab = 'pre' | 'post' | 'comparison';
+
 const TestRetestVisualization: React.FC<TestRetestVisualizationProps> = ({
   comparison,
   longitudinalProgress,
@@ -24,6 +26,9 @@ const TestRetestVisualization: React.FC<TestRetestVisualizationProps> = ({
 }) => {
   const screenWidth = Dimensions.get('window').width;
   const chartWidth = screenWidth - 40;
+
+  // State for sway visualization tab selection
+  const [selectedSwayTab, setSelectedSwayTab] = useState<SwayViewTab>('pre');
 
   const renderComparisonChart = () => {
     if (!comparison) return null;
@@ -317,56 +322,160 @@ const TestRetestVisualization: React.FC<TestRetestVisualizationProps> = ({
       <View style={styles.swayVisualizationContainer}>
         <Text style={styles.sectionTitle}>Postural Sway Analysis</Text>
         
-        
-        <View style={styles.swayComparisonRow}>
-          <View style={styles.swayVisualizationItem}>
-            <PosturalSwayVisualization
-              swayPath={preSession.swayPath}
-              confidenceEllipse={preSession.confidenceEllipse}
-              title="Pre-Exercise"
-              showGrid={true}
-              highlightExcursions={true}
-            />
+        <View style={styles.swayTabs}>
+          <TouchableOpacity
+            style={[styles.swayTab, selectedSwayTab === 'pre' && styles.swayTabActive]}
+            onPress={() => setSelectedSwayTab('pre')}
+          >
+            <Text style={[styles.swayTabText, selectedSwayTab === 'pre' && styles.swayTabTextActive]}>Pre-Exercise</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.swayTab, selectedSwayTab === 'post' && styles.swayTabActive]}
+            onPress={() => setSelectedSwayTab('post')}
+          >
+            <Text style={[styles.swayTabText, selectedSwayTab === 'post' && styles.swayTabTextActive]}>Post-Exercise</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.swayTab, selectedSwayTab === 'comparison' && styles.swayTabActive]}
+            onPress={() => setSelectedSwayTab('comparison')}
+          >
+            <Text style={[styles.swayTabText, selectedSwayTab === 'comparison' && styles.swayTabTextActive]}>Comparison</Text>
+          </TouchableOpacity>
+        </View>
+
+        {selectedSwayTab === 'pre' && (
+          <PosturalSwayVisualization
+            swayPath={preSession.swayPath}
+            confidenceEllipse={preSession.confidenceEllipse}
+            title="Pre-Exercise"
+            showGrid={true}
+            highlightExcursions={true}
+          />
+        )}
+        {selectedSwayTab === 'post' && (
+          <PosturalSwayVisualization
+            swayPath={postSession.swayPath}
+            confidenceEllipse={postSession.confidenceEllipse}
+            title="Post-Exercise"
+            showGrid={true}
+            highlightExcursions={true}
+          />
+        )}
+        {selectedSwayTab === 'comparison' && (
+          <View style={styles.comparisonView}>
+            <View style={styles.comparisonRow}>
+              <View style={styles.comparisonItem}>
+                <PosturalSwayVisualization
+                  swayPath={preSession.swayPath}
+                  confidenceEllipse={preSession.confidenceEllipse}
+                  title="Pre-Exercise"
+                  showGrid={true}
+                  highlightExcursions={true}
+                />
+              </View>
+              <View style={styles.comparisonItem}>
+                <PosturalSwayVisualization
+                  swayPath={postSession.swayPath}
+                  confidenceEllipse={postSession.confidenceEllipse}
+                  title="Post-Exercise"
+                  showGrid={true}
+                  highlightExcursions={true}
+                />
+              </View>
+            </View>
+            
+            {/* Comparison metrics */}
+            <View style={styles.comparisonMetrics}>
+              <Text style={styles.comparisonMetricsTitle}>Comparison Metrics</Text>
+              <View style={styles.comparisonMetricsRow}>
+                <View style={styles.comparisonMetric}>
+                  <Text style={styles.comparisonMetricLabel}>Area Change</Text>
+                  <Text style={[
+                    styles.comparisonMetricValue,
+                    { color: comparison.ellipseAreaChange < 0 ? '#28a745' : '#dc3545' }
+                  ]}>
+                    {comparison.ellipseAreaChange > 0 ? '+' : ''}{comparison.ellipseAreaChange.toFixed(1)} cm²
+                  </Text>
+                </View>
+                <View style={styles.comparisonMetric}>
+                  <Text style={styles.comparisonMetricLabel}>% Change</Text>
+                  <Text style={[
+                    styles.comparisonMetricValue,
+                    { color: comparison.percentageChange < 0 ? '#28a745' : '#dc3545' }
+                  ]}>
+                    {comparison.percentageChange > 0 ? '+' : ''}{comparison.percentageChange.toFixed(1)}%
+                  </Text>
+                </View>
+                <View style={styles.comparisonMetric}>
+                  <Text style={styles.comparisonMetricLabel}>Category</Text>
+                  <Text style={styles.comparisonMetricValue}>
+                    {comparison.improvementCategory.replace(/_/g, ' ').toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
-          
-          <View style={styles.swayVisualizationItem}>
-            <PosturalSwayVisualization
-              swayPath={postSession.swayPath}
-              confidenceEllipse={postSession.confidenceEllipse}
-              title="Post-Exercise"
-              showGrid={true}
-              highlightExcursions={true}
-            />
+        )}
+
+        {/* Session Information */}
+        <View style={styles.sessionInfo}>
+          <Text style={styles.sessionInfoTitle}>Session Information</Text>
+          <View style={styles.sessionInfoRow}>
+            <View style={styles.sessionInfoItem}>
+              <Text style={styles.sessionInfoLabel}>
+                {selectedSwayTab === 'pre' ? 'Pre-Exercise' :
+                 selectedSwayTab === 'post' ? 'Post-Exercise' : 'Exercise Type'}
+              </Text>
+              <Text style={styles.sessionInfoValue}>
+                {selectedSwayTab === 'pre' ? `${preSession.confidenceEllipseArea.toFixed(1)} cm²` :
+                 selectedSwayTab === 'post' ? `${postSession.confidenceEllipseArea.toFixed(1)} cm²` :
+                 preSession.exerciseType}
+              </Text>
+            </View>
+            <View style={styles.sessionInfoItem}>
+              <Text style={styles.sessionInfoLabel}>
+                {selectedSwayTab === 'comparison' ? 'Change' : 'Duration'}
+              </Text>
+              <Text style={styles.sessionInfoValue}>
+                {selectedSwayTab === 'comparison' ? 
+                  `${comparison.ellipseAreaChange > 0 ? '+' : ''}${comparison.ellipseAreaChange.toFixed(1)} cm²` :
+                  `${selectedSwayTab === 'pre' ? preSession.duration : postSession.duration}s`}
+              </Text>
+            </View>
           </View>
         </View>
 
-        {/* Comparison Summary */}
-        <View style={styles.swayComparisonSummary}>
-          <Text style={styles.swayComparisonTitle}>Sway Analysis Summary</Text>
-          <View style={styles.swayMetricsRow}>
-            <View style={styles.swayMetric}>
-              <Text style={styles.swayMetricLabel}>Ellipse Area Change</Text>
-              <Text style={[
-                styles.swayMetricValue,
-                { color: comparison.ellipseAreaChange < 0 ? '#28a745' : '#dc3545' }
-              ]}>
-                {comparison.ellipseAreaChange > 0 ? '+' : ''}{comparison.ellipseAreaChange.toFixed(1)} cm²
-              </Text>
-            </View>
-            <View style={styles.swayMetric}>
-              <Text style={styles.swayMetricLabel}>Path Length Change</Text>
-                             <Text style={styles.swayMetricValue}>
-                 {calculatePathLengthChange(preSession, postSession).toFixed(1)} mm
-               </Text>
-             </View>
-             <View style={styles.swayMetric}>
-               <Text style={styles.swayMetricLabel}>Excursion Change</Text>
-               <Text style={styles.swayMetricValue}>
-                 {calculateExcursionChange(preSession, postSession)}
-               </Text>
+        {/* Comparison Summary - only show when not in comparison tab */}
+        {selectedSwayTab !== 'comparison' && (
+          <View style={styles.swayComparisonSummary}>
+            <Text style={styles.swayComparisonTitle}>Quick Comparison</Text>
+            <View style={styles.swayMetricsRow}>
+              <View style={styles.swayMetric}>
+                <Text style={styles.swayMetricLabel}>Other Session</Text>
+                <Text style={styles.swayMetricValue}>
+                  {selectedSwayTab === 'pre' ? 
+                    `${postSession.confidenceEllipseArea.toFixed(1)} cm²` :
+                    `${preSession.confidenceEllipseArea.toFixed(1)} cm²`}
+                </Text>
+              </View>
+              <View style={styles.swayMetric}>
+                <Text style={styles.swayMetricLabel}>Change</Text>
+                <Text style={[
+                  styles.swayMetricValue,
+                  { color: comparison.ellipseAreaChange < 0 ? '#28a745' : '#dc3545' }
+                ]}>
+                  {comparison.ellipseAreaChange > 0 ? '+' : ''}{comparison.ellipseAreaChange.toFixed(1)} cm²
+                </Text>
+              </View>
+              <View style={styles.swayMetric}>
+                <Text style={styles.swayMetricLabel}>Category</Text>
+                <Text style={styles.swayMetricValue}>
+                  {comparison.improvementCategory.replace(/_/g, ' ').toUpperCase()}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
+        )}
       </View>
     );
   };
@@ -725,14 +834,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
   },
-  swayComparisonRow: {
+  swayTabs: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
   },
-  swayVisualizationItem: {
-    flex: 1,
-    marginHorizontal: 4,
+  swayTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  swayTabActive: {
+    borderBottomColor: '#007bff',
+  },
+  swayTabText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6c757d',
+  },
+  swayTabTextActive: {
+    color: '#007bff',
   },
   swayComparisonSummary: {
     backgroundColor: '#f8f9fa',
@@ -766,6 +891,82 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     textAlign: 'center',
+  },
+  comparisonView: {
+    marginTop: 16,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  comparisonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  comparisonItem: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  comparisonMetrics: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+  },
+  comparisonMetricsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  comparisonMetricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  comparisonMetric: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  comparisonMetricLabel: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  comparisonMetricValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+  },
+  sessionInfo: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+  },
+  sessionInfoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  sessionInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  sessionInfoItem: {
+    alignItems: 'center',
+  },
+  sessionInfoLabel: {
+    fontSize: 12,
+    color: '#6c757d',
+    marginBottom: 4,
+  },
+  sessionInfoValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#212529',
   },
 });
 

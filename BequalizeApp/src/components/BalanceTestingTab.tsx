@@ -18,7 +18,7 @@ import { LocalStorageService } from '../services/LocalStorageService';
 import { TestRetestManager } from '../services/TestRetestManager';
 
 // Types
-import { SensorDataPacket, ExerciseType } from '../types/SensorData';
+import { SensorDataPacket, ExerciseType, VestibularCondition } from '../types/SensorData';
 import { TestSession, SessionComparison, LongitudinalProgress } from '../services/TestRetestManager';
 
 type TestPhase = 'setup' | 'pre-test' | 'exercise-selection' | 'exercise' | 'post-test' | 'results';
@@ -43,6 +43,7 @@ const BalanceTestingTab: React.FC<BalanceTestingTabProps> = ({
   
   // Test data
   const [exerciseType, setExerciseType] = useState<ExerciseType>('Romberg Test (Eyes Open)');
+  const [selectedCondition, setSelectedCondition] = useState<VestibularCondition>('normal');
   const [preTestSession, setPreTestSession] = useState<TestSession | null>(null);
   const [postTestSession, setPostTestSession] = useState<TestSession | null>(null);
   const [sessionComparison, setSessionComparison] = useState<SessionComparison | null>(null);
@@ -64,6 +65,34 @@ const BalanceTestingTab: React.FC<BalanceTestingTabProps> = ({
     'Weight Shifting Exercises',
     'Limits of Stability Test'
   ];
+
+  // Vestibular condition options with descriptions
+  const vestibularConditions: Array<{
+    value: VestibularCondition;
+    label: string;
+    description: string;
+  }> = [
+    { value: 'normal', label: 'Normal', description: 'Healthy adult baseline' },
+    { value: 'bppv', label: 'BPPV', description: 'Benign Paroxysmal Positional Vertigo' },
+    { value: 'vestibular_neuritis', label: 'Vestibular Neuritis', description: 'Inflammation of vestibular nerve' },
+    { value: 'menieres', label: 'Menière\'s Disease', description: 'Episodic vertigo with hearing loss' },
+    { value: 'bilateral_loss', label: 'Bilateral Loss', description: 'Bilateral vestibular loss' },
+    { value: 'unilateral_loss', label: 'Unilateral Loss', description: 'Unilateral vestibular loss' },
+    { value: 'migraine', label: 'Vestibular Migraine', description: 'Migraine with vestibular symptoms' }
+  ];
+
+  // Update vestibular condition when selection changes
+  const handleConditionChange = (condition: VestibularCondition) => {
+    setSelectedCondition(condition);
+    bluetoothManager.setVestibularCondition(condition);
+    console.log(`🧠 Vestibular condition set to: ${condition}`);
+  };
+
+  // Initialize vestibular condition on component mount
+  useEffect(() => {
+    bluetoothManager.setVestibularCondition(selectedCondition);
+    console.log(`🧠 Initialized vestibular condition to: ${selectedCondition}`);
+  }, []);
 
   // Timer effect
   useEffect(() => {
@@ -180,17 +209,35 @@ const BalanceTestingTab: React.FC<BalanceTestingTabProps> = ({
       Alert.alert('Not Connected', 'Please connect to your Bequalize Belt first.');
       return;
     }
+    
+    // Set exercise state to pre-test for realistic data simulation
+    bluetoothManager.setExerciseState('pre-test');
+    bluetoothManager.setDataCollectionState('collecting-pre', 'pre-test-session');
+    
     setCurrentPhase('pre-test');
     startTimer(30);
   };
 
   const startPostTest = () => {
+    // Set exercise state to post-test for realistic data simulation
+    bluetoothManager.setExerciseState('post-test');
+    bluetoothManager.setDataCollectionState('collecting-post', 'post-test-session');
+    
     setCurrentPhase('post-test');
     startTimer(30);
   };
 
   const resetTest = () => {
     stopTimer();
+    
+    // Reset exercise state to baseline
+    bluetoothManager.setExerciseState('baseline');
+    bluetoothManager.setDataCollectionState('idle');
+    
+    // Reset vestibular condition to normal
+    setSelectedCondition('normal');
+    bluetoothManager.setVestibularCondition('normal');
+    
     setCurrentPhase('setup');
     setPreTestSession(null);
     setPostTestSession(null);
@@ -209,6 +256,47 @@ const BalanceTestingTab: React.FC<BalanceTestingTabProps> = ({
         </Text>
       </View>
 
+      {/* Vestibular Condition Selector */}
+      <View style={styles.conditionSelectorCard}>
+        <Text style={styles.cardTitle}>🧠 Simulated Vestibular Condition</Text>
+        <Text style={styles.conditionDescriptionText}>
+          Select a condition to test how different vestibular disorders affect balance data:
+        </Text>
+        
+        <View style={styles.conditionGrid}>
+          {vestibularConditions.map((condition) => (
+            <TouchableOpacity
+              key={condition.value}
+              style={[
+                styles.conditionOption,
+                selectedCondition === condition.value && styles.selectedCondition
+              ]}
+              onPress={() => handleConditionChange(condition.value)}
+            >
+              <Text style={[
+                styles.conditionLabel,
+                selectedCondition === condition.value && styles.selectedConditionLabel
+              ]}>
+                {condition.label}
+              </Text>
+              <Text style={[
+                styles.conditionDescriptionSmall,
+                selectedCondition === condition.value && styles.selectedConditionDescriptionSmall
+              ]}>
+                {condition.description}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.currentSelectionCard}>
+          <Text style={styles.currentSelectionTitle}>Selected Condition:</Text>
+          <Text style={styles.currentSelectionValue}>
+            {vestibularConditions.find(c => c.value === selectedCondition)?.label} - {vestibularConditions.find(c => c.value === selectedCondition)?.description}
+          </Text>
+        </View>
+      </View>
+
       <View style={styles.protocolCard}>
         <Text style={styles.cardTitle}>📋 Test Protocol</Text>
         <Text style={styles.protocolStep}>1. Pre-Exercise Test (30 seconds)</Text>
@@ -221,6 +309,9 @@ const BalanceTestingTab: React.FC<BalanceTestingTabProps> = ({
         <Text style={styles.cardTitle}>Ready to Begin?</Text>
         <Text style={styles.connectionStatus}>
           Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+        </Text>
+        <Text style={styles.conditionStatus}>
+          Condition: {vestibularConditions.find(c => c.value === selectedCondition)?.label}
         </Text>
         
         <TouchableOpacity
@@ -322,7 +413,12 @@ const BalanceTestingTab: React.FC<BalanceTestingTabProps> = ({
         <Text style={styles.cardTitle}>Selected: {exerciseType}</Text>
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={() => setCurrentPhase('exercise')}
+          onPress={() => {
+            // Set exercise state to exercising
+            bluetoothManager.setExerciseState('exercising');
+            bluetoothManager.setDataCollectionState('idle');
+            setCurrentPhase('exercise');
+          }}
         >
           <Text style={styles.buttonText}>Continue to Exercise</Text>
         </TouchableOpacity>
@@ -614,6 +710,82 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  conditionSelectorCard: {
+    backgroundColor: '#fff',
+    margin: 20,
+    padding: 20,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  conditionDescriptionText: {
+    fontSize: 16,
+    color: '#495057',
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  conditionDescriptionSmall: {
+    fontSize: 14,
+    color: '#6c757d',
+  },
+  conditionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  conditionOption: {
+    width: '45%',
+    backgroundColor: '#f8f9ff',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+    alignItems: 'center',
+    marginVertical: 8,
+  },
+  selectedCondition: {
+    borderColor: '#0d6efd',
+    backgroundColor: '#e9ecef',
+  },
+  conditionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#212529',
+    marginBottom: 4,
+  },
+  selectedConditionLabel: {
+    color: '#0d6efd',
+  },
+  selectedConditionDescriptionSmall: {
+    color: '#0d6efd',
+  },
+  currentSelectionCard: {
+    backgroundColor: '#f8f9ff',
+    padding: 16,
+    borderRadius: 8,
+    marginTop: 16,
+    alignItems: 'center',
+  },
+  currentSelectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#212529',
+    marginBottom: 8,
+  },
+  currentSelectionValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0d6efd',
+  },
+  conditionStatus: {
+    fontSize: 16,
+    marginBottom: 16,
+    color: '#495057',
   },
 });
 

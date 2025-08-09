@@ -1,212 +1,128 @@
-# Bequalize Belt - Vestibular Health Monitoring App
+# Bequalize Belt – Vestibular Health Monitoring (React Native)
 
-A React Native TypeScript application for monitoring vestibular health using the Bequalize Belt sensor device.
+A React Native (Expo) application that simulates and visualizes vestibular health signals collected by the Bequalize Belt. The app provides balance testing (pre/post), breathing exercise guidance with feedback, and a real-time monitoring view showing computed features.
 
-## 🏗️ Project Structure
+## 🎯 Goal
+Deliver a mobile app that:
+- Simulates Bequalize Belt sensor streams at 50 Hz (accelerometer, gyroscope, elastometer, temperature, battery, button state)
+- Guides users through clinically-inspired balance testing with pre/post comparisons
+- Provides structured breathing exercises with real-time feedback
+- Displays live features and insights in a real-time monitoring view
 
+## ✅ What’s been achieved
+- Robust mock sensor engine with condition- and exercise-specific behavior
+- Balance testing workflow (pre-test → exercise → post-test → comparison/results)
+- Confidence ellipse computation and postural sway visualization
+- Breathing exercises with phase-based mock elastometer signal, difficulty control, and live feedback
+- Real-time monitoring view (features-only after ML removal)
+- Local storage of test sessions and comparisons
+- Clean, typed codebase with modular services and algorithms
+
+## 🗂️ App Structure
 ```
 BequalizeApp/
+├── App.tsx                          # App shell: tab navigation, connection state
+├── index.js                         # Expo entry
 ├── src/
-│   ├── types/
-│   │   └── SensorData.ts           # TypeScript type definitions
-│   ├── services/
-│   │   ├── EnhancedMockBluetoothManager.ts  # Mock sensor data generator
-│   │   └── LocalStorageService.ts           # Data persistence service
-│   └── components/
-│       └── SensorDataDisplay.tsx            # Real-time sensor display
-├── App.tsx                         # Main application component
-├── demo.html                       # Web demo for immediate testing
-├── test-setup.js                   # Validation test script
-├── package.json                    # Dependencies and scripts
-├── tsconfig.json                   # TypeScript configuration
-└── README.md                       # This file
+│  ├── components/
+│  │  ├── BalanceTestingTab.tsx      # Balance test protocol UI and flow
+│  │  ├── BreathingExerciseTab.tsx   # Breathing sessions, feedback display & debug
+│  │  ├── BreathingFeedbackDisplay.tsx# Feedback UI for breathing sessions
+│  │  ├── PosturalSwayVisualization.tsx # SVG-based sway + ellipse visualization
+│  │  ├── RealTimeMonitoringTab.tsx  # Live features (postural + respiratory)
+│  │  └── TestRetestVisualization.tsx# Pre/Post charts, insights, longitudinal view
+│  ├── services/
+│  │  ├── EnhancedMockBluetoothManager.ts # 50 Hz mock sensor generator (breathing+balance)
+│  │  ├── TestRetestManager.ts       # Session storage, comparison, longitudinal analytics
+│  │  ├── LocalStorageService.ts     # AsyncStorage wrapper
+│  │  └── RealTimeProcessor.ts       # (Support) Real-time feature extraction helpers
+│  ├── algorithms/
+│  │  ├── VestibularFeatureExtractor.ts   # Postural features + ellipse area
+│  │  └── SignalProcessor.ts         # Respiratory signal processing utilities
+│  ├── ml/
+│  │  ├── DataPreparation.ts         # (Not used at runtime) data prep helpers
+│  │  ├── ModelTrainer.ts            # (Not used at runtime) training helpers
+│  │  └── VestibularMLModel.ts       # (Removed from app flow)
+│  └── types/
+│     └── SensorData.ts              # Centralized TypeScript types
+└── package.json, tsconfig.json, app.json, metro.config.js
 ```
 
-## 🚀 Getting Started
+Note: ML model initialization and prediction were removed from the app flow. The Real-time Monitoring tab now displays features only.
+
+## 🧭 Workflows
+
+### 1) Balance Testing
+- Setup → Pre-test (30s) → Exercise selection → Exercise → Post-test (30s) → Results
+- Pre/Post test windows collect `SensorDataPacket`s at 50 Hz
+- `TestRetestManager.completeTestSession` computes features and stores sessions
+- `TestRetestManager.comparePrePostSessions` computes change and clinical interpretation
+- `TestRetestVisualization` displays pre/post charts, sway visualizations, and longitudinal insights
+
+### 2) Breathing Exercises
+- Choose exercise (diaphragmatic, box, coherence, relaxation)
+- Starts breathing session via `BreathingFeedbackManager`
+- Mock elastometer signal is phase-accurate and exercise-specific using `EnhancedMockBluetoothManager`
+- Real-time feedback shows phase, deviation, severity, and recommendations (`BreathingFeedbackDisplay`)
+- Difficulty control changes regularity/effort; debug panel shows live status & sensor values
+
+### 3) Real-time Monitoring (features only)
+- Start monitoring to fill a sliding buffer of sensor data
+- On each new packet, compute:
+  - IMU orientation → CoP displacement → postural features (`VestibularFeatureExtractor`)
+  - Respiratory metrics from elastometer signal (`SignalProcessor`)
+- Display current feature values; show buffer fill status
+
+## 🔢 Algorithms and Key Formulas
+
+- Orientation from accelerometer:
+  - Roll (deg): `atan2(accel.y, accel.z) * 180/π`
+  - Pitch (deg): `atan2(-accel.x, sqrt(accel.y^2 + accel.z^2)) * 180/π`
+- Approximate center-of-pressure displacement (assuming torso-mounted device):
+  - `copX = roll_deg * (DEVICE_HEIGHT_CM * π / 180) / 100`
+  - `copY = pitch_deg * (DEVICE_HEIGHT_CM * π / 180) / 100`
+- Sway path length: `∑ sqrt(Δx^2 + Δy^2)`
+- Sway velocity: mean step distance / dt
+- 95% confidence ellipse area:
+  - Covariance of CoP → eigenvalues `λ1, λ2`
+  - `area = π * sqrt(λ1 * λ2 * χ²_0.95)` with `χ²_0.95 = 5.991`
+  - Rotation: `θ = atan2(2*covXY, covXX - covYY) / 2`
+- Clinical thresholds:
+  - Normal sway area: 10–20 cm²; Pathological: >50 cm²
+- Improvement categorization (post vs pre):
+  - Percentage change = `(post - pre)/pre * 100`
+  - Thresholds: significant_improvement ≤ -25%, improvement ≤ -10%, deterioration ≥ 10%, significant_deterioration ≥ 25%
+- Breathing mock generation:
+  - Phase-eased envelopes (inhale/hold/exhale/rest)
+  - Exercise-specific modifiers (deep/controlled/coherent/relaxation)
+  - User effort and regularity modulate amplitude and smoothness
+
+## ⚙️ Setup & Run
 
 ### Prerequisites
-- Node.js (v16 or later)
-- Web browser (for immediate demo)
-- React Native CLI (for mobile development - optional)
+- Node.js 18+
+- Yarn or npm
+- Xcode (iOS) or Android Studio (Android) if running on simulator/device
 
-### Quick Start (Web Demo)
-
-**The fastest way to see the project working:**
-
-1. **Navigate to project directory:**
-   ```bash
-   cd BequalizeApp
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   npm install --legacy-peer-deps
-   ```
-
-3. **Run validation tests:**
-   ```bash
-   node test-setup.js
-   ```
-
-4. **Open web demo for phase 1 demo:**
-   ```bash
-   open demo.html
-   ```
-   Or manually open `demo.html` in your browser to see the live simulation!
-
-### React Native Development Setup (Advanced)
-
-For full React Native mobile development, you'll need to set up the complete environment:
-
-**Run on device/simulator:**
-   ```bash
-   # For iOS (requires Xcode and iOS Simulator) 
-   # For Android (requires Android Studio and Emulator)
-   npx expo start --clear
-   ```
-
-### Available Scripts
-
-- **`npm run type-check`** - Check TypeScript compilation
-- **`node test-setup.js`** - Run project validation tests
-- **`open demo.html`** - Open web demo in browser
-- **`npx expo start --clear --ios`** - Run on iOS 
-- **`npx expo start --clear --android`** - Run on Android 
-
-## 🌐 Web Demo Features
-
-**The web demo (`demo.html`) provides immediate access to:**
-
-- ✅ **Real-time sensor data** at 50Hz
-- ✅ **Vestibular condition simulation** (Healthy, BPPV, UVH, BVL)
-- ✅ **Interactive exercise controls** (Connect, Start/Stop Exercise, Calibrate)
-- ✅ **Live breathing visualization** with animated progress bars
-- ✅ **Realistic sensor patterns** matching clinical conditions
-- ✅ **Session tracking** with data point counting
-
-## 📱 Features Implemented (Phase 1)
-
-### ✅ Core Infrastructure
-- **TypeScript Configuration**: Full TypeScript support with strict typing
-- **Project Structure**: Organized folder structure following best practices
-- **Sensor Data Types**: Complete type definitions based on documentation
-
-### ✅ Mock Data System
-- **Enhanced Mock Bluetooth Manager**: Realistic sensor data simulation
-- **Vestibular Condition Simulation**: Different pathological patterns
-  - Healthy Control
-  - BPPV (Benign Paroxysmal Positional Vertigo)
-  - Unilateral Vestibular Hypofunction
-  - Bilateral Vestibular Loss
-  - Vestibular Migraine
-  - Meniere's Disease
-  - Vestibular Neuritis
-
-### ✅ Data Visualization
-- **Real-time Sensor Display**: Live sensor data visualization
-- **Device Status Monitoring**: Battery, connection, temperature
-- **Multi-axis Data Display**: 3D accelerometer and gyroscope data
-- **Respiratory Monitoring**: Elastometer breathing pattern display
-
-### ✅ Data Persistence
-- **Local Storage Service**: AsyncStorage-based session storage
-- **Exercise Session Tracking**: Historical exercise data
-- **Progress Analytics**: Basic trend analysis
-- **Export/Import Functionality**: Data backup and restore
-
-### ✅ User Interface
-- **Connection Management**: Connect/disconnect to mock device
-- **Exercise Controls**: Start/stop exercise sessions with calibration
-- **Simulation Controls**: Switch between different vestibular conditions
-- **Session History**: View past exercise sessions
-
-## 🔧 Key Components
-
-### SensorDataPacket
-Follows the exact JSON format specified in the documentation:
-```typescript
-interface SensorDataPacket {
-  timestamp: number;
-  battery_percent: number;
-  buttons_state: number;
-  accelerometer: { x: number; y: number; z: number };
-  gyroscope: { x: number; y: number; z: number };
-  elastometer_value: number;
-  temperature_celsius: number;
-}
+### Install
+```bash
+cd BequalizeApp
+npm install
 ```
 
-### Mock Data Generator
-- **50Hz sampling rate** as specified
-- **Realistic sensor patterns** for different vestibular conditions
-- **Calibration phase simulation** including belt stretch detection
-- **Environmental factors** (temperature drift, battery drain)
+### Start (Expo)
+```bash
+npx expo start --clear
+# press i for iOS simulator, a for Android, or scan QR in Expo Go
+```
 
-## 🎯 Next Steps (Phase 2)
+### Project Scripts
+- `npx expo start --clear` – start the app fresh
+- `npm run type-check` – run the TypeScript compiler (if configured)
 
-The foundation is now complete. The next phase will implement:
+## 🔍 Notes
+- Sensor streams are simulated by `EnhancedMockBluetoothManager` at 50 Hz.
+- ML integration has been removed from the runtime path; the monitoring tab focuses on feature computation and display.
+- Test/demo artifacts and legacy web demo were removed to simplify the app.
 
-1. **Signal Processing Pipeline**
-   - Complementary and Kalman filtering
-   - IMU sensor fusion
-   - Respiratory signal processing
-
-2. **Feature Engineering**
-   - Postural sway analysis
-   - Breathing pattern recognition
-   - Clinical assessment metrics
-
-3. **Machine Learning Integration**
-   - TensorFlow Lite model implementation
-   - On-device inference
-   - Clinical prediction algorithms
-
-## 🔍 Testing the Application
-
-### Web Demo Testing:
-1. **Open `demo.html`** in your browser
-2. **Click "Connect Device"** → See realistic sensor data flowing at 50Hz
-3. **Click "Start Exercise"** → Watch data collection with real-time counters
-4. **Try different conditions** → "BPPV", "UVH", "BVL" buttons show different sway patterns
-5. **Observe breathing patterns** → Green bar shows elastometer-based breathing cycles
-
-### Development Testing:
-1. **Run validation:** `node test-setup.js`
-2. **Type checking:** `npm run type-check`
-3. **Code structure:** All TypeScript files compile without errors
-
-## 📊 Mock Data Features
-
-- **Realistic Patterns**: Each vestibular condition has unique sway and breathing patterns
-- **Noise Simulation**: Realistic sensor noise and artifacts
-- **Battery Simulation**: Gradual battery drain during use
-- **Temperature Variation**: Body temperature fluctuations
-- **Button Press Simulation**: Random button state changes
-
-## 🛠️ Development Notes
-
-- **TypeScript Strict Mode**: All code written with strict typing
-- **Documentation Compliance**: Follows original documentation specifications
-- **Modular Architecture**: Clean separation of concerns
-- **Error Handling**: Comprehensive error handling and user feedback
-- **Performance Optimized**: Efficient data handling for real-time processing
-
-## 📝 Configuration
-
-The app uses the following key configurations:
-- **Sample Rate**: 50Hz (20ms intervals)
-- **Buffer Size**: 500 data points (10 seconds)
-- **Data Format**: JSON as specified in documentation
-- **Storage**: Local AsyncStorage for privacy
-
-## ⚠️ Current Status
-
-- ✅ **Web Demo**: Fully functional - immediate testing available
-- ✅ **TypeScript Code**: Complete and validated
-- ✅ **Mock Data System**: Realistic clinical patterns
-- ⚠️ **React Native**: Basic setup complete, requires full RN environment for mobile testing
-- 🔄 **Next Phase**: Ready for signal processing and ML implementation
-
----
-
-**Note**: This is a development version using mock data. The web demo provides immediate access to all core functionality. For full React Native mobile development, additional setup is required. The next phase will integrate with actual Bequalize Belt hardware and implement advanced ML algorithms for clinical assessment. 
+If you want a PDF or slide-ready summary of goals, workflows, and formulas, I can generate that too. 

@@ -54,10 +54,16 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
   const [phaseTimer, setPhaseTimer] = useState(0);
   const [totalSessionTime, setTotalSessionTime] = useState(0);
   
+  // NEW: Enhanced debugging and monitoring state
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [breathingStatus, setBreathingStatus] = useState<any>(null);
+  const [simulatedDifficulty, setSimulatedDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
+  
   // Services
   const breathingManager = useRef(new BreathingFeedbackManager());
   const sessionTimer = useRef<NodeJS.Timeout | null>(null);
   const phaseInterval = useRef<NodeJS.Timeout | null>(null);
+  const statusUpdateInterval = useRef<NodeJS.Timeout | null>(null);
 
   // Breathing exercise definitions
   const breathingExercises = {
@@ -103,24 +109,34 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
     }
   };
 
-  // Initialize breathing manager
+  // Enhanced breathing data processing with improved respiratory metrics
   useEffect(() => {
     if (isConnected && latestPacket && currentSession?.isActive) {
-      // Create respiratory metrics from elastometer data
+      // Enhanced respiratory metrics calculation for breathing exercises
+      const recentElastometerValues = [latestPacket.elastometer_value]; // In real app, would use buffer
+      const breathingRate = calculateBreathingRateFromElastometer(recentElastometerValues);
+      const amplitude = Math.abs(latestPacket.elastometer_value - 2048);
+      
       const respiratoryMetrics = {
-        breathingRate: 15, // placeholder - would be calculated from signal processing
-        breathingAmplitude: latestPacket.elastometer_value,
-        ieRatio: 0.5,
-        breathingRegularity: 0.8,
+        breathingRate: breathingRate,
+        breathingAmplitude: amplitude,
+        ieRatio: calculateIERatio(currentSession.currentPhase),
+        breathingRegularity: calculateBreathingRegularity(amplitude),
         filteredSignal: [latestPacket.elastometer_value],
-        peaks: [0],
-        valleys: [0]
+        peaks: [amplitude > 100 ? latestPacket.elastometer_value : 0],
+        valleys: [amplitude < 50 ? latestPacket.elastometer_value : 0]
       };
       
       const feedback = breathingManager.current.processBreathingData(respiratoryMetrics);
       setCurrentFeedback(feedback);
+      
+      // Update breathing effort based on performance
+      if (feedback) {
+        const effortScore = feedback.isOnTarget ? 1.0 : Math.max(0.3, 1.0 - Math.abs(feedback.deviation.rateDeviation) / 10);
+        bluetoothManager.setBreathingEffort(effortScore);
+      }
     }
-  }, [latestPacket, isConnected, currentSession?.isActive]);
+  }, [latestPacket, isConnected, currentSession?.isActive, currentSession?.currentPhase]);
 
   // Session timer
   useEffect(() => {
@@ -154,6 +170,30 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
     };
   }, [currentSession?.isActive, currentPattern]);
 
+  // NEW: Breathing exercise status monitoring
+  useEffect(() => {
+    if (currentSession?.isActive) {
+      // Update breathing status every 500ms during active sessions
+      statusUpdateInterval.current = setInterval(() => {
+        const status = bluetoothManager.getBreathingExerciseStatus();
+        setBreathingStatus(status);
+      }, 500);
+    } else {
+      if (statusUpdateInterval.current) {
+        clearInterval(statusUpdateInterval.current);
+        statusUpdateInterval.current = null;
+      }
+      setBreathingStatus(null);
+    }
+
+    return () => {
+      if (statusUpdateInterval.current) {
+        clearInterval(statusUpdateInterval.current);
+      }
+    };
+  }, [currentSession?.isActive]);
+
+  // Enhanced breathing cycle management with mock data integration
   const runBreathingCycle = () => {
     if (!currentSession || !currentPattern) return;
 
@@ -171,6 +211,9 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
 
       const phase = phases[phaseIndex];
       setCurrentSession(prev => prev ? { ...prev, currentPhase: phase.name } : null);
+      
+      // Update the mock data generator with current breathing phase
+      bluetoothManager.setBreathingPhase(phase.name);
       
       // Animate breathing guide
       Animated.timing(breathingGuideScale, {
@@ -193,6 +236,9 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
           
           // Complete cycle after rest phase
           if (phaseIndex === 0) {
+            // Update breathing cycle in mock data generator
+            bluetoothManager.updateBreathingCycle();
+            
             setCurrentSession(prev => {
               if (prev) {
                 const newCycles = prev.cycles + 1;
@@ -226,11 +272,21 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
     
     // Map to actual exercise types
     const exerciseTypeMap: Record<BreathingExerciseType, ExerciseType> = {
-      diaphragmatic: 'Romberg Test (Eyes Open)',
-      box_breathing: 'Romberg Test (Eyes Closed)',
+      diaphragmatic: 'Guided Diaphragmatic Breathing',
+      box_breathing: 'Controlled Deep Breathing',
       coherence: 'Single Leg Stand',
       relaxation: 'Weight Shifting Exercises'
     };
+
+    // Calculate target breathing rate based on exercise timing
+    const cycleTime = exercise.inhaleTime + exercise.holdTime + exercise.exhaleTime + exercise.restTime;
+    const targetRate = Math.round(60 / cycleTime); // Convert to breaths per minute
+
+    // Start the enhanced breathing exercise simulation with target rate
+    bluetoothManager.startBreathingExercise(selectedExercise, targetRate);
+    
+    // Apply difficulty simulation
+    bluetoothManager.simulateBreathingDifficulty(simulatedDifficulty);
 
     const pattern = breathingManager.current.startBreathingSession(
       exerciseTypeMap[selectedExercise]
@@ -248,11 +304,21 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
     });
 
     setTotalSessionTime(0);
+    
+    console.log(`🎯 Started ${exercise.name} session:`, {
+      targetRate: targetRate,
+      difficulty: simulatedDifficulty,
+      targetCycles: exercise.cycles,
+      exerciseType: selectedExercise
+    });
   };
 
   const stopBreathingSession = () => {
     setCurrentSession(prev => prev ? { ...prev, isActive: false } : null);
     breathingManager.current.stopBreathingSession();
+    
+    // Stop the enhanced breathing exercise simulation
+    bluetoothManager.stopBreathingExercise();
     
     if (phaseInterval.current) {
       clearInterval(phaseInterval.current);
@@ -260,13 +326,30 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
   };
 
   const completeSession = () => {
+    const sessionStats = breathingManager.current.getSessionStatistics();
+    const finalStatus = bluetoothManager.getBreathingExerciseStatus();
+    
     Alert.alert(
       'Session Complete!',
       `Great job! You completed ${currentSession?.cycles} breathing cycles in ${Math.floor(totalSessionTime / 60)} minutes.`,
-      [{ text: 'OK', onPress: () => setCurrentSession(null) }]
+      [{ 
+        text: 'OK', 
+        onPress: () => {
+          setCurrentSession(null);
+          // Stop the enhanced breathing exercise simulation
+          bluetoothManager.stopBreathingExercise();
+        }
+      }]
     );
     
     breathingManager.current.stopBreathingSession();
+    
+    console.log(`✅ Completed ${breathingExercises[selectedExercise].name} session:`, {
+      cycles: currentSession?.cycles,
+      duration: totalSessionTime,
+      sessionStats: sessionStats,
+      finalStatus: finalStatus
+    });
   };
 
   const renderExerciseSelection = () => (
@@ -318,6 +401,40 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
           Status: {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
         </Text>
         
+        {/* NEW: Difficulty Selection */}
+        <View style={styles.difficultySelector}>
+          <Text style={styles.selectorLabel}>Simulation Difficulty:</Text>
+          <View style={styles.difficultyButtons}>
+            {(['easy', 'medium', 'hard'] as const).map((difficulty) => (
+              <TouchableOpacity
+                key={difficulty}
+                style={[
+                  styles.difficultyButton,
+                  simulatedDifficulty === difficulty && styles.selectedDifficultyButton
+                ]}
+                onPress={() => setSimulatedDifficulty(difficulty)}
+              >
+                <Text style={[
+                  styles.difficultyButtonText,
+                  simulatedDifficulty === difficulty && styles.selectedDifficultyText
+                ]}>
+                  {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* NEW: Debug Toggle */}
+        <TouchableOpacity
+          style={styles.debugToggle}
+          onPress={() => setShowDebugInfo(!showDebugInfo)}
+        >
+          <Text style={styles.debugToggleText}>
+            {showDebugInfo ? '🔍 Hide' : '🔍 Show'} Debug Info
+          </Text>
+        </TouchableOpacity>
+        
         <TouchableOpacity
           style={[styles.primaryButton, !isConnected && styles.disabledButton]}
           onPress={startBreathingSession}
@@ -332,13 +449,20 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
   );
 
   const renderActiveSession = () => (
-    <View style={styles.sessionContainer}>
+    <ScrollView 
+      style={styles.container} 
+      contentContainerStyle={styles.sessionContentContainer}
+      showsVerticalScrollIndicator={true}
+    >
       <View style={styles.sessionHeader}>
         <Text style={styles.sessionTitle}>
           {breathingExercises[selectedExercise].name}
         </Text>
         <Text style={styles.sessionProgress}>
           Cycle {currentSession?.cycles || 0} of {currentSession?.targetCycles || 0}
+        </Text>
+        <Text style={styles.difficultyIndicator}>
+          Difficulty: {simulatedDifficulty.charAt(0).toUpperCase() + simulatedDifficulty.slice(1)}
         </Text>
       </View>
 
@@ -364,14 +488,64 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
         </Text>
       </View>
 
-             {currentFeedback && (
-         <BreathingFeedbackDisplay
-           currentFeedback={currentFeedback}
-           currentPattern={currentPattern || undefined}
-           sessionState={breathingManager.current.getCurrentSessionState() || undefined}
-           isActive={currentSession?.isActive || false}
-         />
-       )}
+      {currentFeedback && (
+        <View style={styles.feedbackContainer}>
+          <BreathingFeedbackDisplay
+            currentFeedback={currentFeedback}
+            currentPattern={currentPattern || undefined}
+            sessionState={breathingManager.current.getCurrentSessionState() || undefined}
+            isActive={currentSession?.isActive || false}
+          />
+        </View>
+      )}
+
+      {/* NEW: Enhanced Debug Information */}
+      {showDebugInfo && (breathingStatus || latestPacket) && (
+        <View style={styles.debugContainer}>
+          <Text style={styles.debugTitle}>🔍 Debug Information</Text>
+          
+          {breathingStatus && (
+            <View style={styles.debugSection}>
+              <Text style={styles.debugSectionTitle}>Breathing Exercise Status:</Text>
+              <Text style={styles.debugText}>• Exercise Type: {breathingStatus.exerciseType}</Text>
+              <Text style={styles.debugText}>• Current Phase: {breathingStatus.currentPhase}</Text>
+              <Text style={styles.debugText}>• Target Rate: {breathingStatus.targetRate} bpm</Text>
+              <Text style={styles.debugText}>• User Effort: {(breathingStatus.userEffort * 100).toFixed(0)}%</Text>
+              <Text style={styles.debugText}>• Regularity: {(breathingStatus.regularity * 100).toFixed(0)}%</Text>
+              <Text style={styles.debugText}>• Phase Elapsed: {breathingStatus.phaseElapsed.toFixed(1)}s</Text>
+              <Text style={styles.debugText}>• Cycle Elapsed: {breathingStatus.cycleElapsed.toFixed(1)}s</Text>
+            </View>
+          )}
+
+          {latestPacket && (
+            <View style={styles.debugSection}>
+              <Text style={styles.debugSectionTitle}>Sensor Data:</Text>
+              <Text style={styles.debugText}>• Elastometer: {latestPacket.elastometer_value}</Text>
+              <Text style={styles.debugText}>• Amplitude: {Math.abs(latestPacket.elastometer_value - 2048)}</Text>
+              <Text style={styles.debugText}>• Battery: {latestPacket.battery_percent}%</Text>
+              <Text style={styles.debugText}>• Temperature: {latestPacket.temperature_celsius}°C</Text>
+            </View>
+          )}
+
+          {currentFeedback && (
+            <View style={styles.debugSection}>
+              <Text style={styles.debugSectionTitle}>Feedback Metrics:</Text>
+              <Text style={styles.debugText}>• On Target: {currentFeedback.isOnTarget ? '✅' : '❌'}</Text>
+              <Text style={styles.debugText}>• Rate Deviation: {currentFeedback.deviation.rateDeviation.toFixed(1)} bpm</Text>
+              <Text style={styles.debugText}>• Deviation Type: {currentFeedback.deviation.deviationType}</Text>
+              <Text style={styles.debugText}>• Severity: {currentFeedback.deviation.severity}</Text>
+              <Text style={styles.debugText}>• Feedback Type: {currentFeedback.feedbackType}</Text>
+            </View>
+          )}
+          
+          <TouchableOpacity
+            style={styles.debugCloseButton}
+            onPress={() => setShowDebugInfo(false)}
+          >
+            <Text style={styles.debugCloseText}>Hide Debug Info</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.sessionStats}>
         <Text style={styles.statText}>
@@ -388,7 +562,7 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
       >
         <Text style={styles.stopButtonText}>⏹️ Stop Session</Text>
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 
   const getPhaseInstruction = (phase: string): string => {
@@ -406,6 +580,30 @@ const BreathingExerciseTab: React.FC<BreathingExerciseTabProps> = ({
     }
   };
 
+  // Helper functions for enhanced respiratory analysis
+  const calculateBreathingRateFromElastometer = (values: number[]): number => {
+    if (values.length < 10) return 15; // Default fallback
+    
+    // Simple rate estimation based on elastometer variation
+    const variation = Math.abs(values[values.length - 1] - 2048);
+    if (variation > 200) return 8;  // Deep breathing
+    if (variation > 100) return 12; // Normal breathing
+    return 15; // Light breathing
+  };
+
+  const calculateIERatio = (phase: 'inhale' | 'hold' | 'exhale' | 'rest'): number => {
+    const exercise = breathingExercises[selectedExercise];
+    const totalCycle = exercise.inhaleTime + exercise.holdTime + exercise.exhaleTime + exercise.restTime;
+    return exercise.inhaleTime / (exercise.exhaleTime || 1);
+  };
+
+  const calculateBreathingRegularity = (amplitude: number): number => {
+    // Simple regularity estimation based on amplitude consistency
+    if (amplitude > 150) return 0.9; // Good depth consistency
+    if (amplitude > 100) return 0.8; // Moderate consistency
+    return 0.6; // Low consistency
+  };
+
   return currentSession?.isActive ? renderActiveSession() : renderExerciseSelection();
 };
 
@@ -414,11 +612,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f8f9fa',
   },
-  sessionContainer: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
+  sessionContentContainer: {
+    flexGrow: 1,
     padding: 20,
-    justifyContent: 'center',
+    paddingBottom: 40, // Extra bottom padding for safe scrolling
+  },
+  feedbackContainer: {
+    marginBottom: 20,
   },
   header: {
     padding: 20,
@@ -530,30 +730,57 @@ const styles = StyleSheet.create({
   },
   sessionHeader: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 30,
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sessionTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#212529',
     marginBottom: 8,
+    textAlign: 'center',
   },
   sessionProgress: {
     fontSize: 16,
     color: '#6c757d',
   },
+  difficultyIndicator: {
+    fontSize: 16,
+    color: '#495057',
+    marginTop: 10,
+  },
   breathingGuideContainer: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 30,
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   breathingGuide: {
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
     backgroundColor: '#0d6efd',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
   },
   breathingGuideText: {
     color: '#fff',
@@ -561,7 +788,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   phaseTimer: {
-    fontSize: 48,
+    fontSize: 42,
     fontWeight: 'bold',
     color: '#212529',
     marginBottom: 4,
@@ -576,6 +803,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 20,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   instructionText: {
     fontSize: 18,
@@ -590,6 +822,11 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   statText: {
     fontSize: 16,
@@ -602,11 +839,115 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     borderRadius: 8,
     alignItems: 'center',
+    marginTop: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   stopButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // NEW: Difficulty Selection Styles
+  difficultySelector: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  selectorLabel: {
+    fontSize: 16,
+    color: '#495057',
+    marginBottom: 10,
+  },
+  difficultyButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+  },
+  difficultyButton: {
+    backgroundColor: '#e9ecef',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ced4da',
+  },
+  selectedDifficultyButton: {
+    backgroundColor: '#0d6efd',
+    borderColor: '#0d6efd',
+  },
+  difficultyButtonText: {
+    fontSize: 14,
+    color: '#495057',
+    fontWeight: '600',
+  },
+  selectedDifficultyText: {
+    color: '#fff',
+  },
+  // NEW: Debug Toggle Styles
+  debugToggle: {
+    backgroundColor: '#e9ecef',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ced4da',
+    marginBottom: 20,
+  },
+  debugToggleText: {
+    fontSize: 14,
+    color: '#495057',
+    fontWeight: '600',
+  },
+  // NEW: Debug Information Styles
+  debugContainer: {
+    backgroundColor: '#fff',
+    margin: 20,
+    padding: 20,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  debugTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#212529',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  debugSection: {
+    marginBottom: 15,
+  },
+  debugSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#495057',
+    marginBottom: 8,
+  },
+  debugText: {
+    fontSize: 14,
+    color: '#6c757d',
+    marginBottom: 4,
+  },
+  debugCloseButton: {
+    backgroundColor: '#e9ecef',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ced4da',
+    marginTop: 15,
+  },
+  debugCloseText: {
+    fontSize: 14,
+    color: '#495057',
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });
 
